@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import pytest
+
+from workflow import WorkflowInput, WorkflowOutputOptions, WorkflowRunOptions, Task, build_execution_plan
+
+
+def _base_task() -> Task:
+    return Task(
+        input=WorkflowInput(
+            qasm_text="OPENQASM 3; qubit[1] q; bit[1] c; measure q[0] -> c[0];",
+            backend_path="examples/backend.yaml",
+            analyser={"trajectory": {"save_times": "all"}},
+        ),
+        run=WorkflowRunOptions(decoder="mwpm"),
+        output=WorkflowOutputOptions(out_dir="runs/planner_test"),
+    )
+
+
+def test_default_plan_uses_full_template_qec_path():
+    plan = build_execution_plan(_base_task())
+
+    assert plan.template == "full"
+    assert plan.targets == ["logical_error", "sensitivity_report"]
+    assert plan.run_decode is True
+    assert plan.run_analysis is True
+    assert plan.run_decoder_eval is False
+    assert plan.run_pauli_plus is False
+    assert plan.run_cross_engine_compare is False
+
+
+def test_simulate_template_skips_decode_but_keeps_analysis_when_analyser_present():
+    task = _base_task()
+    task.template = "simulate"
+
+    plan = build_execution_plan(task)
+
+    assert plan.targets == ["trajectory"]
+    assert plan.run_decode is False
+    assert plan.run_analysis is True
+
+
+def test_cross_engine_target_requires_compare_engines():
+    task = _base_task()
+    task.targets = ["cross_engine_compare"]
+
+    with pytest.raises(ValueError, match="run.compare_engines"):
+        build_execution_plan(task)
+
+
+def test_minimal_artifact_mode_normalizes_to_targeted():
+    task = _base_task()
+    task.template = "simulate"
+    task.output = WorkflowOutputOptions(artifact_mode="minimal")
+
+    plan = build_execution_plan(task)
+
+    assert plan.artifact_mode == "targeted"
+
+
+def test_non_julia_engines_reject_julia_only_fields():
+    task = _base_task()
+    task.template = "simulate"
+    task.run.julia_timeout_s = 30.0
+
+    with pytest.raises(ValueError, match="Julia-only keys"):
+        build_execution_plan(task)

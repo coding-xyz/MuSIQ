@@ -1,0 +1,16 @@
+runs/
+examples/
+personal_use/
+report/
+agent_config/
+*/__pycache__/
+*__pycache__*
+.julia*
+.vscode/
+.VSCodeCounter/
+.pre-commit-config.yaml
+*runs*
+*.pytest*
+pytest_*
+tmp*
+*tmp*

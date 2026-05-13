@@ -1,0 +1,6 @@
+device: {}
+noise:
+  model: markovian_lindblad
+  T1_s: 8.0e-5
+  T2_s: 6.0e-5
+  readout_error: 0.01

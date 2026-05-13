@@ -1,0 +1,16 @@
+﻿backend:
+  level: qubit
+  analysis_pipeline: default
+  truncation: {}
+run:
+  engine: qutip
+  solver_mode: me
+  sweep: []
+  seed: 1234
+  dt_s: 1.0e-9
+  schedule_policy: serial
+  reset_feedback_policy: parallel
+frame:
+  mode: rotating
+  reference: pulse_carrier
+  rwa: true

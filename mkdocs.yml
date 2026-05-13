@@ -1,0 +1,51 @@
+site_name: MuSIQ 文档
+site_description: MuSIQ 使用指南、实现 Wiki 与自动生成 API 参考
+repo_name: MuSIQ
+use_directory_urls: false
+docs_dir: docs/src
+site_dir: docs/site
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.sections
+    - content.code.copy
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/src/dev/gen_ref_pages.py
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            show_root_toc_entry: false
+            docstring_style: google
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+exclude_docs: |
+  WIKI*.md
+  schema.md
+  schema_*.md
+  wiki/backend_model.md
+  wiki/circuit.md
+  wiki/noise_engine.md
+
+nav:
+  - 首页: index.md
+  - 核心架构:
+      - 系统架构: architecture.md
+      - 数据分类学: taxonomy.md
+      - 工作流指南: workflow.md
+  - API 参考:
+      - 总览: api/index.md

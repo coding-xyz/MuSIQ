@@ -1,0 +1,16 @@
+schema_version: "1.0"
+trajectory:
+  quantum: density_matrix
+  save_times: all
+  save_final_state: true
+  save_jump_events: false
+  save_measurement_records: false
+case_metrics:
+  - population
+  - leakage
+  - coherence_01
+sweep_metrics:
+  - final_P0
+  - final_P1
+  - final_leakage
+  - final_coherence_01

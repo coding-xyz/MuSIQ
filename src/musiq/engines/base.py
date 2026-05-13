@@ -1,0 +1,19 @@
+"""Abstract base definitions for simulation engines."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+
+from musiq.common.schemas import ModelSpec, Trajectory
+
+
+class Engine(ABC):
+    """Abstract base class for simulation backends."""
+
+    name = "base"
+
+    @abstractmethod
+    def run(self, model_spec: ModelSpec, run_options: dict | None = None) -> Trajectory:
+        """Run simulation and return normalized ``Trajectory``."""
+        raise NotImplementedError
+
