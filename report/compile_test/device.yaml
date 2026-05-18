@@ -1,0 +1,100 @@
+schema_version: "3.0"
+device:
+  components:
+    - id: q0
+      type: transmon
+      description: control-like transmon for two-qubit CZ simulation
+      ports:
+        drive: drive_q0
+      parameters:
+        freq_Hz: 5.00e9
+        anharmonicity_Hz: -2.0e8
+      noise:
+        - id: q0_T1
+          kind: markovian
+          operator: lowering
+          rate:
+            T1_s: 24.0e-6
+        - id: q0_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          rate:
+            Tphi_s: 19.764706e-6
+    - id: q1
+      type: transmon
+      description: target-like transmon for two-qubit CZ simulation
+      ports:
+        drive: drive_q1
+      parameters:
+        freq_Hz: 5.10e9
+        anharmonicity_Hz: -2.1e8
+      noise:
+        - id: q1_T1
+          kind: markovian
+          operator: lowering
+          rate:
+            T1_s: 22.0e-6
+        - id: q1_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          rate:
+            Tphi_s: 16.5e-6
+    - id: q2
+      type: transmon
+      description: target-like transmon for two-qubit CZ simulation
+      ports:
+        drive: drive_q2
+      parameters:
+        freq_Hz: 5.20e9
+        anharmonicity_Hz: -1.9e8
+      noise:
+        - id: q2_T1
+          kind: markovian
+          operator: lowering
+          rate:
+            T1_s: 22.0e-6
+        - id: q2_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          rate:
+            Tphi_s: 16.5e-6
+    - id: q3
+      type: transmon
+      description: target-like transmon for two-qubit CZ simulation
+      ports:
+        drive: drive_q3
+      parameters:
+        freq_Hz: 5.20e9
+        anharmonicity_Hz: -1.9e8
+      noise:
+        - id: q3_T1
+          kind: markovian
+          operator: lowering
+          rate:
+            T1_s: 22.0e-6
+        - id: q3_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          rate:
+            Tphi_s: 16.5e-6
+  connections:
+    - id: zz_q0_q1
+      type: zz
+      a: q0
+      b: q1
+      parameters:
+        g_Hz: 0.0
+    - id: zz_q1_q2
+      type: zz
+      a: q1
+      b: q2
+      parameters:
+        g_Hz: 0.0
+    - id: zz_q2_q3
+      type: zz
+      a: q2
+      b: q3
+      parameters:
+        g_Hz: 0.0
+  simulation_level: nlevel
+  control_scale: 1.0

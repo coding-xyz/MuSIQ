@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -550,12 +551,23 @@ def sweep_from_payload(payload: Any) -> ParameterSweepConfig:
     if not isinstance(payload, dict):
         raise TypeError(f"Sweep payload must be a dict, got {type(payload)}")
 
+    def _looks_like_value_list(value: Any) -> bool:
+        if isinstance(value, (str, bytes, bytearray, Mapping)):
+            return False
+        if isinstance(value, Iterable):
+            try:
+                iter(value)
+            except TypeError:
+                return False
+            return True
+        return False
+
     # Check if it's the simplified format: {'theta': [0, 0.1, ...]}
-    if "parameters" not in payload and any(isinstance(v, (list, tuple)) for v in payload.values()):
+    if "parameters" not in payload and any(_looks_like_value_list(v) for v in payload.values()):
         # Simplified format: convert to full format
         payload = {
             "parameters": {
-                k: {"target": k, "values": v} for k, v in payload.items()
+                k: {"target": k, "values": list(v)} for k, v in payload.items()
             },
             "mode": None,
             "metadata": {}

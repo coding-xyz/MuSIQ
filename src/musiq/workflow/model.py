@@ -42,6 +42,7 @@ from musiq.workflow.model_execution import (
     run,
     run_all,
     run_analysis,
+    run_profile,
     run_solver,
     run_study,
 )
@@ -89,13 +90,13 @@ class Profile:
     model: Any
     config: ProfileConfig
 
-    def run_solver(self, solver_id: str | None = None, tag: str | None = None) -> None:
+    def run_solver(self, solver_id: str | None = None, tag: str | None = None) -> list[str]:
         """Compile and solve one configured solver, running every study step by default."""
-        run_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
+        return run_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
 
-    def run_analysis(self, analyser_id: str | None = None, study_name: str | None = None, tag: str | None = None) -> None:
+    def run_analysis(self, analyser_id: str | None = None, study_name: str | None = None, tag: str | None = None, run_ids: list[str] | None = None) -> None:
         """Run one analyser against every matching study trajectory into ``model.analyses``."""
-        run_analysis(self.model, analyser_id=analyser_id or self.config.analyser_id, study_name_val=study_name, tag=tag)
+        run_analysis(self.model, analyser_id=analyser_id or self.config.analyser_id, study_name_val=study_name, tag=tag, run_ids=run_ids)
 
 @dataclass(slots=True)
 class Model:
@@ -224,29 +225,8 @@ class Model:
         run(self)
 
     def run_profile(self, profile_id: str, tag: str | None = None) -> None:
-        """
-        Run simulation for a specific profile.
-        This method temporarily isolates the target profile to ensure only its 
-        configuration is expanded by the StudyPlanner.
-        """
-        p_wrapper = self.profile(profile_id)
-        
-        # Backup original profiles
-        original_profiles = dict(self.config.profiles)
-
-        try:
-            # Isolate target profile so StudyPlanner only generates samples for it
-            self.config.profiles = {profile_id: p_wrapper.config}
-            
-            # Run the solver associated with this profile
-            p_wrapper.run_solver(tag=tag)
-            
-            # Trigger analysis for the results produced
-            p_wrapper.run_analysis(tag=tag)
-            
-        finally:
-            # Restore original profiles regardless of success/failure
-            self.config.profiles = original_profiles
+        """Run one configured profile end-to-end."""
+        run_profile(self, profile_id, tag=tag)
 
 
 NamedConfigPaths = str | Path | dict[str, str | Path]

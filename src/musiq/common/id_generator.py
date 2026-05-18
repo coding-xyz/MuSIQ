@@ -20,6 +20,11 @@ class IDGenerator:
         """Generate next available run_id."""
         existing = set(model.runs.keys())
         prefix = tag if tag else "run"
+        
+        # If a custom tag is provided and doesn't conflict, use it directly
+        if tag and prefix not in existing:
+            return prefix
+            
         idx = 0
         while f"{prefix}_{idx}" in existing:
             idx += 1
@@ -52,6 +57,11 @@ class IDGenerator:
         """
         prefix = tag if tag else ANALYSIS_PREFIXES.get(scope, "case")
         existing = set(model.analyses.keys())
+        
+        # If a custom tag is provided and doesn't conflict, use it directly
+        if tag and prefix not in existing:
+            return prefix
+            
         idx = 0
         while f"{prefix}_{idx}" in existing:
             idx += 1

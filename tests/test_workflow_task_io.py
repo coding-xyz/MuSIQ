@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from musiq.ui.cli import build_parser
@@ -10,6 +11,7 @@ from musiq.workflow import create_model, load_model
 from musiq.workflow.task_io import (
     load_analyser_config_file,
     load_circuit_config_file,
+    load_config,
     load_device_config_file,
     load_pulse_config_file,
     load_solver_config_file,
@@ -287,6 +289,13 @@ def test_analyser_config_loads_case_and_sweep_metrics(tmp_path: Path):
     analyser = load_analyser_config_file(p)
     assert analyser.case_metrics == ["population"]
     assert analyser.sweep_metrics == ["final_P0", "final_leakage"]
+
+
+def test_sweep_config_accepts_numpy_array_shorthand():
+    sweep = load_config({"pulse:idle_duration_ns": np.linspace(0.0, 100.0, 5)}, "sweep")
+
+    assert sweep.parameters["pulse:idle_duration_ns"].target == "pulse:idle_duration_ns"
+    assert sweep.parameters["pulse:idle_duration_ns"].values == [0.0, 25.0, 50.0, 75.0, 100.0]
 
 
 def test_device_config_with_qubits_is_accepted(tmp_path: Path):
