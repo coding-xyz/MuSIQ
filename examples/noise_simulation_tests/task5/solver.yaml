@@ -1,0 +1,29 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  study:
+    - name: single_qubit_pulse_optimization
+      description: compare square and DRAG single-qubit pulses for high-fidelity X and H targets
+      active_components: [q0]
+      active_connections: []
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
+      solver_mode: me
+      time:
+        dt_s: 1.0e-10
+        t_end_s: 16e-9
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}
+  schedule:
+    policy: serial

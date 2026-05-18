@@ -1,0 +1,28 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  study:
+    - name: gaussian_drag_leakage
+      description: compare Gaussian and DRAG X gates in a three-level transmon model
+      active_components: [q0]
+      active_connections: []
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
+      solver_mode: me
+      time:
+        dt_s: 1.0e-10
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}
+  schedule:
+    policy: serial

@@ -6,6 +6,7 @@ import pytest
 
 from musiq.schemas.model import ModelRun, RunIdentity
 from musiq.schemas.results import MetricSeries, RunResult, RunProvenance, ParameterValues
+from musiq.common.id_generator import IDGenerator
 from musiq.workflow.contracts import SolverBackendConfig, SolverConfig, WorkflowRunOptions
 from musiq.workflow.model_execution import (
     _extract_case_metric_terminal,
@@ -141,9 +142,9 @@ def test_run_sample_recompiles_with_sample_param_bindings(monkeypatch):
     def fake_run_engine_stage(*, model_spec, **kwargs):
         return SimpleNamespace(engine="fake", metadata={"bound_params": dict(model_spec.bound_params)})
 
-    monkeypatch.setattr("workflow.model_execution.parse_compile_lower_model", fake_parse_compile_lower_model)
-    monkeypatch.setattr("workflow.model_execution.run_engine_stage", fake_run_engine_stage)
-    monkeypatch.setattr("workflow.model_execution.build_execution_plan", lambda task: SimpleNamespace(run_decode=False))
+    monkeypatch.setattr("musiq.workflow.model_execution.parse_compile_lower_model", fake_parse_compile_lower_model)
+    monkeypatch.setattr("musiq.workflow.model_execution.run_engine_stage", fake_run_engine_stage)
+    monkeypatch.setattr("musiq.workflow.model_execution.build_execution_plan", lambda task: SimpleNamespace(run_decode=False))
 
     run_obj = ModelRun(
         identity=RunIdentity(run_id="run_solver_0", solver_id="solver_0"),
@@ -188,10 +189,29 @@ def test_run_sample_recompiles_with_sample_param_bindings(monkeypatch):
         artifacts=SimpleNamespace(model_spec=SimpleNamespace(bound_params={"theta": 0.0})),
     )
 
-    sample = StudySample(task_id="task_0", device_id="device_0", pulse_id="pulse_0", solver_id="solver_0", params={"theta": 1.25})
+    sample = StudySample(
+        profile_id=None,
+        circuit_id="circuit_0",
+        device_id="device_0",
+        pulse_id="pulse_0",
+        solver_id="solver_0",
+        params={"theta": 1.25},
+    )
     run_sample(SimpleNamespace(), run_obj, sample)
 
     assert compile_calls == [{"theta": 1.25}]
     stored_result = next(iter(run_obj.results.values()))
     assert stored_result.runtime_metadata["param_bindings"] == {"theta": 1.25}
     assert stored_result.trajectories["shot_0"].metadata["bound_params"] == {"theta": 1.25}
+
+
+def test_id_generator_skips_existing_run_and_analysis_ids():
+    model = SimpleNamespace(
+        runs={"run_0": object(), "run_1": object()},
+        analyses={"case_0": object(), "summary_0": object(), "sweep_0": object()},
+    )
+
+    assert IDGenerator.next_run_id(model) == "run_2"
+    assert IDGenerator.next_analysis_id(model, scope="case") == "case_1"
+    assert IDGenerator.next_analysis_id(model, scope="parametric") == "sweep_1"
+    assert IDGenerator.next_analysis_id(model, scope="comprehensive") == "summary_1"

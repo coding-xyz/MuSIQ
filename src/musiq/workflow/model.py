@@ -8,30 +8,33 @@ from typing import Any
 
 from musiq.analysis import MetricRegistry, build_default_metric_registry
 from musiq.schemas.model import ModelRun, ModelSpec, RunArtifacts, RunIdentity, ModelManifest
-from musiq.schemas.results import ModelAnalysis, RunResult, Trajectory
+from musiq.schemas.results import AnalysisScope, ModelAnalysis, RunResult, Trajectory
 from musiq.workflow.contracts import (
     AnalyserConfig,
+    CircuitConfig,
+    DeviceConfig,
+    ProfileConfig,
     PulseAcquisitionConfig,
     PulseChannelConfig,
-    PulseTimingConfig,
-    DeviceConfig,
     PulseConfig,
+    PulseTimingConfig,
     SolverConfig,
     Task,
-    TaskConfig,
+    WorkflowFeatureFlags,
+    WorkflowOutputOptions,
 )
 from musiq.workflow.task_io import (
     load_analyser_config_file,
+    load_circuit_config_file,
     load_device_config_file,
     load_pulse_config_file,
     load_solver_config_file,
-    load_task_config_file,
+    load_config,
 )
 
 from musiq.workflow.model_utils import (
     _UNSET,
     bind_loaded_analyser,
-    normalize_named_paths,
 )
 from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.workflow.model_execution import (
@@ -47,12 +50,17 @@ from musiq.workflow.model_persistence import load_model as _load_model_impl, sav
 @dataclass(slots=True)
 class ModelConfig:
     """Aggregated configuration for the quantum simulation workflow."""
-    tasks: dict[str, TaskConfig]
+    circuits: dict[str, CircuitConfig]
     devices: dict[str, DeviceConfig]
     pulses: dict[str, PulseConfig]
     solvers: dict[str, SolverConfig]
     analysers: dict[str, AnalyserConfig] = field(default_factory=dict)
+    profiles: dict[str, ProfileConfig] = field(default_factory=dict)
     parameter_list: ParameterSweepConfig | None = None
+    target: str | list[str] = "trajectory"
+    features: WorkflowFeatureFlags = field(default_factory=WorkflowFeatureFlags)
+    output: WorkflowOutputOptions = field(default_factory=WorkflowOutputOptions)
+    tags: list[str] = field(default_factory=list)
 
 @dataclass(slots=True)
 class ModelState:
@@ -66,6 +74,30 @@ class ModelRegistry:
     metrics: MetricRegistry = field(default_factory=build_default_metric_registry)
 
 @dataclass(slots=True)
+class Solver:
+    """Wrapper for solver configuration and execution."""
+    model: Any
+    config: SolverConfig
+
+    def run_study(self, *, study_name: str | None = None, study_index: int | None = None) -> str:
+        """Compile and solve one specific study step into ``model.runs``."""
+        return run_study(self.model, solver_id=None, study_name_val=study_name, study_index=study_index)
+
+@dataclass(slots=True)
+class Profile:
+    """Wrapper for profile configuration and execution."""
+    model: Any
+    config: ProfileConfig
+
+    def run_solver(self, solver_id: str | None = None, tag: str | None = None) -> None:
+        """Compile and solve one configured solver, running every study step by default."""
+        run_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
+
+    def run_analysis(self, analyser_id: str | None = None, study_name: str | None = None, tag: str | None = None) -> None:
+        """Run one analyser against every matching study trajectory into ``model.analyses``."""
+        run_analysis(self.model, analyser_id=analyser_id or self.config.analyser_id, study_name_val=study_name, tag=tag)
+
+@dataclass(slots=True)
 class Model:
     """Top-down editable model object."""
 
@@ -76,16 +108,15 @@ class Model:
     runs: dict[str, ModelRun] = field(default_factory=dict)
     analyses: dict[str, ModelAnalysis] = field(default_factory=dict)
 
-    # --- Backward Compatibility Properties ---
     @property
-    def task(self) -> TaskConfig: 
-        return next(iter(self.config.tasks.values()))
+    def circuit(self) -> CircuitConfig:
+        return next(iter(self.config.circuits.values()))
     @property
     def device(self) -> DeviceConfig: 
         return next(iter(self.config.devices.values()))
     @property
-    def solvers(self) -> dict[str, SolverConfig]: 
-        return self.config.solvers
+    def solvers(self) -> dict[str, Solver]: 
+        return {sid: Solver(self, cfg) for sid, cfg in self.config.solvers.items()}
     @property
     def pulse(self) -> PulseConfig: 
         return next(iter(self.config.pulses.values()))
@@ -104,7 +135,7 @@ class Model:
         analysis_ids = sorted(self.analyses.keys())
         return (
             'Model('
-            f'solvers={sorted(self.solvers.keys())}, '
+            f'solvers={sorted(self.config.solvers.keys())}, '
             f'analysers={[(analyser_id, cfg.solver_id) for analyser_id, cfg in sorted(self.analysers.items())]}, '
             f'runs={run_ids}, '
             f'analyses={analysis_ids}'
@@ -135,19 +166,35 @@ class Model:
         return next(iter(first_res.trajectories.values()), None) if first_res else None
 
     def get_analysis(self, *, analyser_id: str | None = None, study_name: str | None = None) -> ModelAnalysis | None:
-        from musiq.workflow.model_utils import require_analyser_id, safe_study_token
+        from musiq.workflow.model_utils import require_analyser_id
         selected_analyser_id = require_analyser_id(self, analyser_id)
+        matching = [
+            analysis
+            for analysis in self.analyses.values()
+            if str(analysis.analyser_id) == selected_analyser_id
+        ]
         if study_name is None:
-            return self.analyses.get(selected_analyser_id)
-        token = safe_study_token(study_name)
-        return self.analyses.get(f'{selected_analyser_id}__{token}')
+            if not matching:
+                return None
+            for scope in (AnalysisScope.COMPREHENSIVE, AnalysisScope.PARAMETRIC):
+                preferred = next((analysis for analysis in matching if analysis.scope == scope), None)
+                if preferred is not None:
+                    return preferred
+            return matching[0] if len(matching) == 1 else None
+        wanted = str(study_name).strip()
+        for analysis in matching:
+            for ref in analysis.input_results:
+                run_obj = self.runs.get(ref.run_id)
+                if run_obj and str(run_obj.identity.study_name or "").strip() == wanted:
+                    return analysis
+        return None
 
     def find_analysis_for_run(self, run_id: str) -> ModelAnalysis | None:
         """Find the first analysis that depends on the given run ID."""
         return next((a for a in self.analyses.values() if any(ref.run_id == run_id for ref in a.input_results)), None)
 
     def add_solver(self, solver_id: str, solver_cfg: SolverConfig) -> None:
-        self.solvers[str(solver_id)] = solver_cfg
+        self.config.solvers[str(solver_id)] = solver_cfg
 
     def add_analyser(self, analyser_id: str, solver_id: str, analyser_cfg: AnalyserConfig) -> None:
         from musiq.workflow.model_utils import require_solver_id
@@ -162,17 +209,11 @@ class Model:
         """Persist the current model state to a directory."""
         return _save_model_impl(self, path)
 
-    def run_study(self, *, solver_id: str | None = None, study_name: str | None = None, study_index: int | None = None) -> str:
-        """Compile and solve one specific study step into ``model.runs``."""
-        return run_study(self, solver_id=solver_id, study_name_val=study_name, study_index=study_index)
-
-    def run_solver(self, solver_id: str | None = None) -> None:
-        """Compile and solve one configured solver, running every study step by default."""
-        run_solver(self, solver_id=solver_id)
-
-    def run_analysis(self, *, analyser_id: str | None = None, study_name: str | None = None) -> None:
-        """Run one analyser against every matching study trajectory into ``model.analyses``."""
-        run_analysis(self, analyser_id=analyser_id, study_name_val=study_name)
+    def profile(self, profile_id: str) -> Profile:
+        """Get a profile wrapper for the specified profile ID."""
+        if profile_id not in self.config.profiles:
+            raise KeyError(f"Profile `{profile_id}` not found in model configuration.")
+        return Profile(self, self.config.profiles[profile_id])
 
     def run_all(self) -> None:
         """Run every configured solver and then every configured analyser."""
@@ -182,130 +223,363 @@ class Model:
         """Run all configured solvers and analysers."""
         run(self)
 
+    def run_profile(self, profile_id: str, tag: str | None = None) -> None:
+        """
+        Run simulation for a specific profile.
+        This method temporarily isolates the target profile to ensure only its 
+        configuration is expanded by the StudyPlanner.
+        """
+        p_wrapper = self.profile(profile_id)
+        
+        # Backup original profiles
+        original_profiles = dict(self.config.profiles)
+
+        try:
+            # Isolate target profile so StudyPlanner only generates samples for it
+            self.config.profiles = {profile_id: p_wrapper.config}
+            
+            # Run the solver associated with this profile
+            p_wrapper.run_solver(tag=tag)
+            
+            # Trigger analysis for the results produced
+            p_wrapper.run_analysis(tag=tag)
+            
+        finally:
+            # Restore original profiles regardless of success/failure
+            self.config.profiles = original_profiles
+
+
+NamedConfigPaths = str | Path | dict[str, str | Path]
+
+
+def _ensure_config(value: Any, config_type: str, base_dir: Path | None = None) -> Any:
+    """Ensure the value is a proper Config object, converting from path or dict if necessary."""
+    type_map = {
+        "circuit": CircuitConfig,
+        "solver": SolverConfig,
+        "device": DeviceConfig,
+        "pulse": PulseConfig,
+        "analyser": AnalyserConfig,
+        "profile": ProfileConfig,
+    }
+    cls = type_map.get(config_type)
+    if cls and isinstance(value, cls):
+        return value
+    
+    # For pulse, it might be a dict that's already 'processed' but not a PulseConfig object
+    # PulseConfig is a dataclass, so we check that.
+    
+    return load_config(value, config_type, base_dir=base_dir)
+
+
+def _normalize_resources(
+    value: Any | None,
+    *,
+    config_type: str,
+    resource_name: str,
+    required: bool,
+    singleton_id: str = "default",
+) -> dict[str, Any]:
+    if value is None:
+        if required:
+            raise ValueError(f"{resource_name}_config is required.")
+        return {}
+    
+    if isinstance(value, dict):
+        # We need to distinguish between a config payload (dict) and a mapping of ids (dict[str, Any])
+        # A mapping of ids typically has keys that aren't the top-level keys of the config.
+        # However, the safest way is to check if the keys match any known config top-level keys
+        # or if it's being passed as a single resource.
+        
+        # In create_model, if it's a dict, we treat it as {id: config_value}
+        # unless it's the only value and looks like a payload.
+        # But to keep it simple and consistent with previous behavior:
+        # if it's a dict, we treat it as a mapping of IDs.
+        
+        normalized: dict[str, Any] = {}
+        for key, val in value.items():
+            key_str = str(key).strip()
+            if not key_str:
+                raise ValueError(f"{resource_name} config IDs must be non-empty strings.")
+            normalized[key_str] = _ensure_config(val, config_type)
+        if required and not normalized:
+            raise ValueError(f"{resource_name}_config is required.")
+        return normalized
+    
+    # Singleton case: value is a path, dict payload, or config object
+    return {singleton_id: _ensure_config(value, config_type)}
+
+
+def _load_named_configs(
+    sources: dict[str, str],
+    *,
+    loader,
+) -> dict[str, Any]:
+    return {
+        config_id: loader(path)
+        for config_id, path in sources.items()
+    }
+
+
+def _normalize_analyser_paths(
+    analyser_config: Any | None | object,
+) -> dict[str, Any]:
+    if analyser_config is _UNSET:
+        return {}
+    return _normalize_resources(
+        analyser_config,
+        config_type="analyser",
+        resource_name="analyser",
+        required=False,
+        singleton_id="analyser_0",
+    )
+
+
+def _normalize_pulse_config(raw_pulse: Any) -> PulseConfig:
+    if isinstance(raw_pulse, PulseConfig):
+        return raw_pulse
+    if not isinstance(raw_pulse, dict):
+        raise TypeError(f"Unsupported pulse config payload type: {type(raw_pulse).__name__}")
+
+    def _split_payload(raw: dict[str, Any], known: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+        known_items = {k: v for k, v in raw.items() if k in known}
+        extras = {k: v for k, v in raw.items() if k not in known}
+        return known_items, extras
+
+    known_fields = {"acquisition", "timing", "channels", "extras"}
+    known_args = {k: v for k, v in raw_pulse.items() if k in known_fields}
+    extra_args = {k: v for k, v in raw_pulse.items() if k not in known_fields}
+    extras = known_args.get("extras") or {}
+    if isinstance(extras, dict):
+        extras.update(extra_args)
+    else:
+        extras = extra_args
+
+    acquisition_known, acquisition_extras = _split_payload(
+        dict(known_args.get("acquisition", {}) or {}),
+        {"shots", "averaging", "trigger_source", "extras"},
+    )
+    timing_known, timing_extras = _split_payload(
+        dict(known_args.get("timing", {}) or {}),
+        {"clock_rate_Hz", "sample_rate_Hz", "precision_s", "extras"},
+    )
+    acquisition_known_extras = dict(acquisition_known.pop("extras", {}) or {})
+    timing_known_extras = dict(timing_known.pop("extras", {}) or {})
+
+    return PulseConfig(
+        acquisition=PulseAcquisitionConfig(
+            **acquisition_known,
+            extras={
+                **acquisition_known_extras,
+                **acquisition_extras,
+            },
+        ),
+        timing=PulseTimingConfig(
+            **timing_known,
+            extras={
+                **timing_known_extras,
+                **timing_known_extras,
+            },
+        ),
+        channels={
+            str(channel_id): (
+                channel_cfg if isinstance(channel_cfg, PulseChannelConfig)
+                else PulseChannelConfig(
+                    **{
+                        k: v
+                        for k, v in dict(channel_cfg or {}).items()
+                        if k in {"type", "amplitude", "duration_ns", "phase", "frequency_Hz"}
+                    },
+                    extras={
+                        k: v
+                        for k, v in dict(channel_cfg or {}).items()
+                        if k not in {"type", "amplitude", "duration_ns", "phase", "frequency_Hz"}
+                    },
+                )
+            )
+            for channel_id, channel_cfg in dict(known_args.get("channels", {}) or {}).items()
+        },
+        extras=extras or None,
+    )
+
+
+import itertools
+
+def _build_cartesian_profiles(
+    *,
+    circuits: dict[str, CircuitConfig],
+    devices: dict[str, DeviceConfig],
+    pulses: dict[str, PulseConfig],
+    solvers: dict[str, SolverConfig],
+    analysers: dict[str, AnalyserConfig],
+) -> dict[str, ProfileConfig]:
+    """Generate all possible combinations of provided resources."""
+    profiles: dict[str, ProfileConfig] = {}
+    
+    # We only need one analyser if available, or None
+    analyser_ids = list(analysers.keys()) if analysers else [None]
+    
+    for c_id, d_id, p_id, s_id, a_id in itertools.product(
+        circuits.keys(), devices.keys(), pulses.keys(), solvers.keys(), analyser_ids
+    ):
+        profile_id = f"{c_id}_{d_id}_{p_id}_{s_id}"
+        profiles[profile_id] = ProfileConfig(
+            circuit_id=c_id,
+            device_id=d_id,
+            pulse_id=p_id,
+            solver_id=s_id,
+            analyser_id=a_id,
+        )
+    
+    # If there's only one combination, we also add the "default" alias
+    if len(profiles) == 1:
+        pid = next(iter(profiles))
+        profiles["default"] = profiles[pid]
+        
+    return profiles
+
+
+def _resolve_profiles(
+    profile_input: Any | None,
+    circuits: dict[str, CircuitConfig],
+    devices: dict[str, DeviceConfig],
+    pulses: dict[str, PulseConfig],
+    solvers: dict[str, SolverConfig],
+    analysers: dict[str, AnalyserConfig],
+) -> dict[str, ProfileConfig]:
+    """Resolve profiles, applying Cartesian product as default or restriction."""
+    if profile_input is None:
+        return _build_cartesian_profiles(
+            circuits=circuits, devices=devices, pulses=pulses, solvers=solvers, analysers=analysers
+        )
+    
+    # Convert profile_input to dict of ProfileConfigs using existing normalization
+    # We temporarily use a dummy name for resource_name to reuse _normalize_resources
+    user_profiles = _normalize_resources(
+        profile_input,
+        config_type="profile",
+        resource_name="profile",
+        required=False,
+        singleton_id="default",
+    )
+    
+    resolved_profiles: dict[str, ProfileConfig] = {}
+    
+    for pid, p_cfg in user_profiles.items():
+        # Cartesian expansion for any missing/None fields in a profile
+        c_options = [p_cfg.circuit_id] if p_cfg.circuit_id else list(circuits.keys())
+        d_options = [p_cfg.device_id] if p_cfg.device_id else list(devices.keys())
+        p_options = [p_cfg.pulse_id] if p_cfg.pulse_id else list(pulses.keys())
+        s_options = [p_cfg.solver_id] if p_cfg.solver_id else list(solvers.keys())
+        a_options = [p_cfg.analyser_id] if p_cfg.analyser_id else (list(analysers.keys()) if analysers else [None])
+        
+        for c, d, p, s, a in itertools.product(c_options, d_options, p_options, s_options, a_options):
+            # Create a specific ID for expanded profiles
+            expanded_id = pid if (len(c_options)==1 and len(d_options)==1 and len(p_options)==1 and len(s_options)==1 and len(a_options)==1) \
+                          else f"{pid}_{c}_{d}_{p}_{s}"
+            resolved_profiles[expanded_id] = ProfileConfig(
+                circuit_id=c, device_id=d, pulse_id=p, solver_id=s, analyser_id=a
+            )
+            
+    return resolved_profiles
+
 
 def create_model(
     *,
-    task_config: str | Path,
-    solver_config: str | Path | dict[str, str | Path] | None = None,
-    device_config: str | Path | None = None,
-    pulse_config: str | Path | None = None,
-    analyser_config: str | Path | dict[str, str | Path] | None | object = _UNSET,
+    circuits: Any,
+    solvers: Any | None = None,
+    devices: Any | None = None,
+    pulses: Any | None = None,
+    analysers: Any | None | object = _UNSET,
+    profiles: Any | None = None,
+    parameter_list: Any | None = None,
 ) -> Model:
-    """Build a top-down editable model object from config files."""
-    task = load_task_config_file(
-        task_config,
-        require_solver_config=(solver_config is None),
-        require_device_config=(device_config is None),
-        require_analyser_config=False,
-    )
-    solver_paths = normalize_named_paths(
-        solver_config,
-        default_id_prefix='solver',
-        fallback_path=task.input.solver_config_path,
-    )
-    if not solver_paths:
-        raise ValueError('At least one solver config is required.')
-    device_path = str(device_config) if device_config is not None else task.input.device_config_path
-    pulse_path = str(pulse_config) if pulse_config is not None else task.input.pulse_config_path
-    if not device_path:
-        raise ValueError('task/device config path is required.')
+    """Build a top-down editable model object from config files, dicts, or config objects."""
+    target: str | list[str] = "trajectory"
+    features = WorkflowFeatureFlags()
+    output = WorkflowOutputOptions()
+    tags: list[str] = []
 
-    if analyser_config is _UNSET:
-        analyser_paths = normalize_named_paths(
-            None,
-            default_id_prefix='analyser',
-            fallback_path=task.input.analyser_config_path,
-        )
-    elif analyser_config is None:
-        analyser_paths = {}
-    else:
-        analyser_paths = normalize_named_paths(
-            analyser_config,
-            default_id_prefix='analyser',
-            fallback_path=None,
-        )
-
-    solvers = {solver_id: load_solver_config_file(path) for solver_id, path in solver_paths.items()}
-    solver_ids = sorted(solvers.keys())
-    analysers = {
+    circuits_res = _normalize_resources(
+        circuits,
+        config_type="circuit",
+        resource_name="circuit",
+        required=True,
+        singleton_id="default",
+    )
+    solvers_res = _normalize_resources(
+        solvers,
+        config_type="solver",
+        resource_name="solver",
+        required=True,
+        singleton_id="solver_0",
+    )
+    devices_res = _normalize_resources(
+        devices,
+        config_type="device",
+        resource_name="device",
+        required=True,
+        singleton_id="default",
+    )
+    pulses_raw = _normalize_resources(
+        pulses,
+        config_type="pulse",
+        resource_name="pulse",
+        required=False,
+        singleton_id="default",
+    )
+    
+    # Analysers need special binding to solvers
+    analyser_raw = _normalize_analyser_paths(analysers)
+    # Convert analyser paths to objects
+    analysers_objs = {
+        aid: _ensure_config(val, "analyser")
+        for aid, val in analyser_raw.items()
+    }
+    
+    solver_ids = sorted(solvers_res.keys())
+    analysers_res = {
         analyser_id: bind_loaded_analyser(
             analyser_id=analyser_id,
-            analyser_cfg=load_analyser_config_file(path),
+            analyser_cfg=cfg,
             solver_ids=solver_ids,
         )
-        for analyser_id, path in analyser_paths.items()
+        for analyser_id, cfg in analysers_objs.items()
     }
-    device = load_device_config_file(device_path)
-    pulse_payload = load_pulse_config_file(pulse_path) if pulse_path else {}
-    if isinstance(pulse_payload, dict):
-        def _split_payload(raw: dict[str, Any], known: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
-            known_items = {k: v for k, v in raw.items() if k in known}
-            extras = {k: v for k, v in raw.items() if k not in known}
-            return known_items, extras
-
-        known_fields = {'acquisition', 'timing', 'channels', 'extras'}
-        known_args = {k: v for k, v in pulse_payload.items() if k in known_fields}
-        extra_args = {k: v for k, v in pulse_payload.items() if k not in known_fields}
-        extras = known_args.get('extras') or {}
-        if isinstance(extras, dict):
-            extras.update(extra_args)
-        else:
-            extras = extra_args
-
-        acquisition_known, acquisition_extras = _split_payload(
-            dict(known_args.get('acquisition', {}) or {}),
-            {'shots', 'averaging', 'trigger_source', 'extras'},
-        )
-        timing_known, timing_extras = _split_payload(
-            dict(known_args.get('timing', {}) or {}),
-            {'clock_rate_Hz', 'sample_rate_Hz', 'precision_s', 'extras'},
-        )
-        acquisition_known_extras = dict(acquisition_known.pop('extras', {}) or {})
-        timing_known_extras = dict(timing_known.pop('extras', {}) or {})
-
-        pulse = PulseConfig(
-            acquisition=PulseAcquisitionConfig(
-                **acquisition_known,
-                extras={
-                    **acquisition_known_extras,
-                    **acquisition_extras,
-                },
-            ),
-            timing=PulseTimingConfig(
-                **timing_known,
-                extras={
-                    **timing_known_extras,
-                    **timing_extras,
-                },
-            ),
-            channels={
-                str(channel_id): (
-                    channel_cfg if isinstance(channel_cfg, PulseChannelConfig)
-                    else PulseChannelConfig(
-                        **{
-                            k: v
-                            for k, v in dict(channel_cfg or {}).items()
-                            if k in {'type', 'amplitude', 'duration_ns', 'phase', 'frequency_Hz'}
-                        },
-                        extras={
-                            k: v
-                            for k, v in dict(channel_cfg or {}).items()
-                            if k not in {'type', 'amplitude', 'duration_ns', 'phase', 'frequency_Hz'}
-                        },
-                    )
-                )
-                for channel_id, channel_cfg in dict(known_args.get('channels', {}) or {}).items()
-            },
-            extras=extras or None,
-        )
+    
+    if pulses_raw:
+        pulses_res = {
+            pid: _normalize_pulse_config(val)
+            for pid, val in pulses_raw.items()
+        }
     else:
-        pulse = pulse_payload
+        pulses_res = {"default": PulseConfig()}
+
+    # Normalize parameter sweep config
+    param_sweep = load_config(parameter_list, "sweep") if parameter_list is not None else None
+
+    # Resolve profiles (Cartesian product by default, or restricted by user input)
+    resolved_profiles = _resolve_profiles(
+        profiles,
+        circuits=circuits_res,
+        devices=devices_res,
+        pulses=pulses_res,
+        solvers=solvers_res,
+        analysers=analysers_res,
+    )
+
     config = ModelConfig(
-        tasks={"default": task},
-        devices={"default": device},
-        pulses={"default": pulse},
-        solvers=solvers,
-        analysers=analysers,
+        circuits=circuits_res,
+        devices=devices_res,
+        pulses=pulses_res,
+        solvers=solvers_res,
+        analysers=analysers_res,
+        profiles=resolved_profiles,
+        parameter_list=param_sweep,
+        target=target,
+        features=features,
+        output=output,
+        tags=tags,
     )
     return Model(config=config)
 

@@ -11,7 +11,8 @@ from musiq.schemas.utils import ParameterSweepConfig, ParameterList, ParametricV
 @dataclass(slots=True)
 class StudySample:
     """A single concrete execution point in the parameter space."""
-    task_id: str
+    profile_id: str | None
+    circuit_id: str
     device_id: str
     pulse_id: str
     solver_id: str
@@ -29,6 +30,16 @@ class StudyPlanner:
     """Expands a Model's parametric configuration into a concrete execution plan."""
 
     @staticmethod
+    def _reserve_run_id(existing_ids: set[str]) -> str:
+        """Allocate a unique run_id against both persisted and in-plan IDs."""
+        idx = 0
+        while f"run_{idx}" in existing_ids:
+            idx += 1
+        run_id = f"run_{idx}"
+        existing_ids.add(run_id)
+        return run_id
+
+    @staticmethod
     def resolve_concrete_value(p_val: Any, current_params: dict[str, Any]) -> Any:
         """Resolve a ParametricValue to a concrete value using current params."""
         if isinstance(p_val, ParametricValue):
@@ -43,7 +54,7 @@ class StudyPlanner:
         Expand the model's config into a plan.
         
         Logic:
-        1. Outer Loop: Cartesian product of tasks x devices x pulses x solvers.
+        1. Outer Loop: Cartesian product of circuits x devices x pulses x solvers.
            Each unique combination = one ModelRun (Compilation Unit).
         2. Inner Loop: Cartesian product of sweep_space.
            Each combination = one RunResult (Execution Sample).
@@ -52,10 +63,34 @@ class StudyPlanner:
         config = model.config
         
         # 1. Define the discrete configuration space
-        task_ids = list(config.tasks.keys())
-        device_ids = list(config.devices.keys())
-        pulse_ids = list(config.pulses.keys())
-        solver_ids = list(config.solvers.keys())
+        if config.profiles:
+            discrete_space: list[tuple[str | None, str, str, str, str]] = []
+            for profile_id, profile in config.profiles.items():
+                if profile.circuit_id not in config.circuits:
+                    raise KeyError(f'Profile `{profile_id}` references unknown circuit_id `{profile.circuit_id}`.')
+                if profile.device_id not in config.devices:
+                    raise KeyError(f'Profile `{profile_id}` references unknown device_id `{profile.device_id}`.')
+                if profile.pulse_id not in config.pulses:
+                    raise KeyError(f'Profile `{profile_id}` references unknown pulse_id `{profile.pulse_id}`.')
+                if profile.solver_id not in config.solvers:
+                    raise KeyError(f'Profile `{profile_id}` references unknown solver_id `{profile.solver_id}`.')
+                discrete_space.append((
+                    str(profile_id),
+                    profile.circuit_id,
+                    profile.device_id,
+                    profile.pulse_id,
+                    profile.solver_id,
+                ))
+        else:
+            discrete_space = [
+                (None, c_id, d_id, p_id, s_id)
+                for c_id, d_id, p_id, s_id in product(
+                    list(config.circuits.keys()),
+                    list(config.devices.keys()),
+                    list(config.pulses.keys()),
+                    list(config.solvers.keys()),
+                )
+            ]
         
         # 2. Define the continuous parameter space
         parameter_list = config.parameter_list
@@ -71,11 +106,12 @@ class StudyPlanner:
         
         all_samples: list[StudySample] = []
         run_groups: dict[str, list[StudySample]] = {}
+        reserved_run_ids = set(model.runs.keys())
         
         # Expand outer and inner loops
-        for t_id, d_id, p_id, s_id in product(task_ids, device_ids, pulse_ids, solver_ids):
-            # Use a concise run_id based on solver_id to avoid "run_default_default..."
-            run_id = f"run_{s_id}"
+        for profile_id, c_id, d_id, p_id, s_id in discrete_space:
+            # Reserve IDs against both existing runs and this in-memory plan.
+            run_id = cls._reserve_run_id(reserved_run_ids)
             run_groups[run_id] = []
             
             for p_combo in param_combinations:
@@ -83,7 +119,8 @@ class StudyPlanner:
                 current_params = dict(zip(param_dims, p_combo))
                 
                 sample = StudySample(
-                    task_id=t_id,
+                    profile_id=profile_id,
+                    circuit_id=c_id,
                     device_id=d_id,
                     pulse_id=p_id,
                     solver_id=s_id,

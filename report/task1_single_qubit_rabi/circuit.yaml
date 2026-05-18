@@ -1,0 +1,8 @@
+schema_version: "1.0"
+qasm_text: |
+  OPENQASM 3;
+  include "stdgates.inc";
+  qubit[1] q;
+  rx(theta) q[0];
+param_bindings:
+  theta: 3.141592653589793

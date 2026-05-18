@@ -1,0 +1,20 @@
+schema_version: "3.0"
+target: trajectory
+input:
+  qasm_text: |
+    OPENQASM 3;
+    include "stdgates.inc";
+    qubit[1] q;
+    x q[0];
+  solver_config: solver.yaml
+  device_config: device.yaml
+  pulse_config: pulse_gaussian.yaml
+  analyser_config: analyser.yaml
+output:
+  out_dir: runs/task3_gaussian_drag_comparison
+  persist_artifacts: false
+  artifact_mode: targeted
+  export_plots: false
+  export_dxf: false
+features: {}
+tags: [report, task3, single-qubit, gaussian, drag, leakage]

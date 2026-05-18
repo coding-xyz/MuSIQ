@@ -1,0 +1,35 @@
+schema_version: "3.0"
+device:
+  components:
+    - id: q0
+      type: transmon
+      description: single qubit exposed to low-frequency flux-like dephasing noise
+      ports:
+        drive: drive_port
+      parameters:
+        freq_Hz: 0.0
+        anharmonicity_Hz: -2.0e8
+      noise:
+        - id: q0_T1
+          kind: markovian
+          operator: lowering
+          rate:
+            T1_s: 80.0e-6
+        - id: q0_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          rate:
+            T1_s: 22.0e-6
+        - id: q0_flux_1overf
+          kind: one_over_f
+          operator: sigma_z_over_2
+          amplitude:
+            rms_Hz: 50.0e3
+            definition: integrated_rms_over_band
+          band_Hz: [5.0e3, 8.0e5]
+          exponent: 1.0
+          psd_convention: one_sided
+  connections: []
+  simulation_level: qubit
+  control_scale: 1.0
+noise: {}

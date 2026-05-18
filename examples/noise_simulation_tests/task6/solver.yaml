@@ -1,0 +1,33 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  study:
+    - name: two_qubit_cz_gate
+      description: simulate a two-transmon CZ-style evolution with an always-on ZZ coupling
+      active_components: [q0, q1]
+      active_connections: [zz_q0_q1]
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+        q1: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
+        q1:
+          kind: nlevel
+          levels: 3
+      solver_mode: me
+      time:
+        dt_s: 1.0e-10
+        t_end_s: 2.0e-7
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}
+  schedule:
+    policy: serial

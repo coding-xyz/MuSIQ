@@ -1,0 +1,46 @@
+schema_version: "1.0"
+trajectory:
+  quantum: density_matrix
+  save_times: all
+  save_final_state: true
+  save_jump_events: false
+  save_measurement_records: true
+metrics:
+  - population
+  - mean_excited
+  - variance
+readout_model:
+  mode: cavity_classical_readout
+  channels:
+    cavity_drive: RO_0
+    local_oscillator: LO_r0
+  input_output:
+    cavity_equation: "dalpha/dt = -(i*Delta_eff + kappa/2) alpha + sqrt(kappa_ext)*a_in(t)"
+    output_equation: "a_out(t) = a_in(t) - sqrt(kappa_ext) * alpha(t)"
+    measured_voltage: "V_IQ(t) ~ gain * (sqrt(eta_chain) * a_out(t) + n_chain(t))"
+  derived_signals:
+    - intracavity_field
+    - outgoing_field
+    - integrated_I
+    - integrated_Q
+iq_discrimination:
+  enabled: true
+  method: linear_discriminant
+  shots: 100
+  features: [I, Q, amplitude, phase]
+  outputs:
+    - iq_centroids
+    - confusion_matrix
+    - assignment_fidelity
+noise_analysis:
+  enabled: true
+  sources:
+    - relaxation
+    - dephasing
+    - resonator_loss
+    - amplifier_added_noise
+    - state_preparation_error
+  outputs:
+    - snr
+    - iq_cluster_separation
+    - assignment_error

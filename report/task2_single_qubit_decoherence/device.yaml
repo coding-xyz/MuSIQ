@@ -1,0 +1,18 @@
+schema_version: "3.0"
+device:
+  components:
+    - id: q0
+      type: transmon
+      description: noiseless single transmon reference
+      ports:
+        drive: drive_port
+      parameters:
+        freq_Hz: 5.0e9
+        anharmonicity_Hz: -2.0e8
+      noise:
+        T1_s: 32.0e-6
+        T2_s: 9.0e-6
+  connections: []
+  simulation_level: nlevel
+  control_scale: 1.0
+  noise: {}

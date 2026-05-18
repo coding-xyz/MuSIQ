@@ -31,12 +31,13 @@ config -> runtime contract -> compiled artifacts -> run results -> trajectories 
 
 ```text
 Model (顶级工作流容器)
-├── config: ModelConfig (静态输入定义)
-│   ├── tasks: dict[str, TaskConfig]              # 任务定义
+├── config: ModelConfig                            # 静态输入定义
+│   ├── circuits: dict[str, CircuitConfig]        # 线路定义
 │   ├── devices: dict[str, DeviceConfig]          # 设备定义
 │   ├── pulses: dict[str, PulseConfig]            # 脉冲定义
 │   ├── solvers: dict[str, SolverConfig]          # 求解器配置
 │   ├── analysers: dict[str, AnalyserConfig]      # 分析器配置
+│   ├── profiles: dict[str, ProfileConfig]        # 资源组合预设
 │   └── parameter_list: ParameterSweepConfig | None
 │       └── parameters: dict[str, ParameterList]  # 参数扫描定义
 │
@@ -98,7 +99,8 @@ Model (顶级工作流容器)
 不要使用 `Workflow*Config` 前缀。配置对象直接使用短名称：
 
 ```text
-TaskConfig
+ModelConfig
+CircuitConfig
 DeviceConfig
 PulseConfig
 SolverConfig
@@ -229,18 +231,36 @@ Trajectory
 
 `ModelConfig` 保存静态输入定义，不保存执行产物。
 
-必须使用复数映射：
+`Model` 顶层应持有单个静态配置对象：
 
 ```text
-tasks: dict[str, TaskConfig]
+config: ModelConfig
+```
+
+单个 `ModelConfig` 的标准结构是：
+```text
+circuits: dict[str, CircuitConfig]
 devices: dict[str, DeviceConfig]
 pulses: dict[str, PulseConfig]
 solvers: dict[str, SolverConfig]
 analysers: dict[str, AnalyserConfig]
+profiles: dict[str, ProfileConfig]
 parameter_list: ParameterSweepConfig | None
 ```
 
+补充约定：
+- 一个 `Model` 对应一个 `ModelConfig`，不同实验空间应拆成多个 `Model`，而不是在同一个 `Model` 下再挂多个 `ModelConfig`。
+- `parameter_list` 的归属是 `ModelConfig`，表示这套静态资源允许的数值参数扫描空间。
+- `profiles` 的归属也是 `ModelConfig`，用于声明离散资源组合预设，例如某个 `profile` 选用哪条 `circuit`、哪个 `device`、哪个 `pulse`、哪个 `solver`、哪个 `analyser`。
+- `CircuitConfig` 负责承载线路本体，运行时装配信息通过 `profiles` 和 `ModelConfig` 中的资源映射完成，不再单独抽一个静态 `TaskConfig` 层。
+
 不同配置文件、不同任务组合、不同 device / pulse / solver / analyser 组合可以生成不同 `ModelRun`。不要把“当前任务”“当前设备”“当前脉冲”硬编码成单例字段。
+
+架构补充说明（2026-05 调整）：
+- `Model` 顶层收敛为单个 `config: ModelConfig`。
+- `ModelConfig` 采用 resource-first 结构，不再保留独立的 `tasks: dict[str, TaskConfig]`。
+- `profiles` 负责离散资源装配，`parameter_list` 负责连续数值扫描，两者是不同维度，不应混用为两套“case / sweep”语义。
+- 建模入口应优先朝 `create_model(circuit.yaml, device.yaml, pulse.yaml, solver.yaml, analyser.yaml, ...)` 收敛，而不是 task-first 装配。
 
 ### ModelState
 
@@ -470,7 +490,7 @@ Pulse 必须拆成三层：
 - `RunIdentity`
 - `RunStatus`
 - `RunArtifacts`
-- `TaskConfig`
+- `ProfileConfig`
 - `DeviceConfig`
 - `PulseConfig`
 - `SolverConfig`

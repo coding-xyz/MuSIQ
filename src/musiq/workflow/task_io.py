@@ -9,9 +9,11 @@ from typing import Any
 import yaml
 
 from musiq.backend.config import validate_backend_config
+from musiq.schemas.utils import ParameterSweepConfig, ParameterList
 from musiq.workflow.contracts import (
     AnalyserTrajectoryConfig,
     AnalyserConfig,
+    CircuitConfig,
     IQDiscriminationConfig,
     NoiseAnalysisConfig,
     PulseAcquisitionConfig,
@@ -20,71 +22,17 @@ from musiq.workflow.contracts import (
     ReadoutModelConfig,
     ReportConfig,
     SolverBackendConfig,
-    TaskInputConfig,
     DeviceConfig,
     WorkflowFeatureFlags,
     WorkflowFrameOptions,
     WorkflowOutputOptions,
     PulseConfig,
+    ProfileConfig,
     WorkflowRunOptions,
     SolverConfig,
     Task,
-    TaskConfig,
     compose_workflow_task,
-    normalize_targets,
 )
-
-
-_TASK_TOP_KEYS = {"schema_version", "target", "input", "features", "output", "tags", "template", "targets", "task"}
-_TASK_INPUT_KEYS = {
-    "qasm_text",
-    "qasm_path",
-    "solver_config",
-    "device_config",
-    "pulse_config",
-    "analyser_config",
-    "param_bindings",
-}
-_TASK_OUTPUT_KEYS = {
-    "out_dir",
-    "persist_artifacts",
-    "artifact_mode",
-    "export_dxf",
-    "export_plots",
-    "session_dir",
-    "session_auto_commit",
-    "session_commit_kinds",
-}
-_TASK_FEATURE_KEYS = {
-    "pauli_plus_analysis",
-    "pauli_plus_code_distances",
-    "pauli_plus_shots",
-    "decoder_eval",
-    "eval_decoders",
-    "eval_seeds",
-    "eval_option_grid",
-    "eval_parallelism",
-    "eval_retries",
-    "eval_resume",
-}
-
-_TARGET_FEATURE_KEYS: dict[str, set[str]] = {
-    "trajectory": set(),
-    "logical_error": set(),
-    "sensitivity_report": set(),
-    "decoder_eval_report": {
-        "decoder_eval",
-        "eval_decoders",
-        "eval_seeds",
-        "eval_option_grid",
-        "eval_parallelism",
-        "eval_retries",
-        "eval_resume",
-    },
-    "scaling_report": {"pauli_plus_analysis", "pauli_plus_code_distances", "pauli_plus_shots"},
-    "error_budget_pauli_plus": {"pauli_plus_analysis", "pauli_plus_code_distances", "pauli_plus_shots"},
-    "cross_engine_compare": set(),
-}
 
 _SOLVER_TOP_KEYS = {"schema_version", "template", "backend", "run", "frame", "study", "solver"}
 _SOLVER_BACKEND_KEYS = {"level", "analysis_pipeline", "analysis", "truncation"}
@@ -130,10 +78,9 @@ _ANALYSER_TOP_KEYS = {
     "noise_analysis",
     "report",
 }
-
-
-def _is_v3_task_payload(payload: dict[str, Any]) -> bool:
-    return isinstance(payload.get("task"), dict)
+_CIRCUIT_TOP_KEYS = {"schema_version", "qasm_text", "qasm_path", "param_bindings", "circuit"}
+def _is_v1_circuit_payload(payload: dict[str, Any]) -> bool:
+    return isinstance(payload.get("circuit"), dict)
 
 
 def _is_v3_solver_payload(payload: dict[str, Any]) -> bool:
@@ -143,37 +90,16 @@ def _is_v3_solver_payload(payload: dict[str, Any]) -> bool:
 def _is_v3_pulse_payload(payload: dict[str, Any]) -> bool:
     raw_pulse = payload.get("pulse", {}) or {}
     return isinstance(raw_pulse, dict) and any(k in raw_pulse for k in {"channels", "carriers", "waveforms", "operations"})
-
-
-def _map_v3_task_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    task = dict(payload.get("task", {}) or {})
-    task_input = dict(task.get("input", {}) or {})
-    task_output = dict(task.get("output", {}) or {})
-    qasm_text = task_input.get("qasm_text")
-    sequence = task.get("sequence")
-    if not qasm_text and isinstance(sequence, dict):
-        qasm_text = sequence.get("qasm_text")
-    mapped: dict[str, Any] = {
-        "schema_version": str(payload.get("schema_version", "3.0")),
-        "target": "trajectory",
-        "input": {
-            "qasm_text": qasm_text,
-            "solver_config": task_input.get("solver_config"),
-            "device_config": task_input.get("device_config"),
-            "pulse_config": task_input.get("pulse_config"),
-            "analyser_config": task_input.get("analyser_config"),
-            "param_bindings": dict(task_input.get("param_bindings", {}) or {}) or None,
-        },
-        "output": {
-            "out_dir": task_output.get("out_dir", "runs/musiq"),
-            "persist_artifacts": bool(task_output.get("persist_artifacts", True)),
-            "artifact_mode": str(task_output.get("artifact_mode", "all")),
-            "export_dxf": bool(task_output.get("export_dxf", False)),
-            "export_plots": bool(task_output.get("export_plots", False)),
-        },
-        "tags": [str(task.get("experiment", "task")).strip().lower()],
-    }
-    return mapped
+def _map_circuit_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if _is_v1_circuit_payload(payload):
+        circuit = dict(payload.get("circuit", {}) or {})
+        return {
+            "schema_version": str(payload.get("schema_version", "1.0")),
+            "qasm_text": circuit.get("qasm_text"),
+            "qasm_path": circuit.get("qasm_path"),
+            "param_bindings": dict(circuit.get("param_bindings", {}) or {}) or None,
+        }
+    return payload
 
 
 def _map_v3_pulse_payload(raw_pulse: dict[str, Any]) -> dict[str, Any]:
@@ -336,71 +262,6 @@ def _reject_unknown(section: str, keys: set[str], allowed: set[str]) -> None:
     unknown = sorted(keys - allowed)
     if unknown:
         raise ValueError(f"Unsupported keys in {section}: {unknown}")
-
-
-def _normalize_targets_from_task_payload(payload: dict[str, Any]) -> list[str]:
-    if "target" in payload:
-        return normalize_targets(payload["target"])
-    if "targets" in payload:
-        return normalize_targets(payload["targets"])
-    raise ValueError("Task config requires `target`.")
-
-
-def _validate_task_payload(
-    payload: dict[str, Any],
-    *,
-    require_solver_config: bool = True,
-    require_device_config: bool = True,
-    require_analyser_config: bool = True,
-) -> list[str]:
-    _reject_unknown("task top-level", set(payload), _TASK_TOP_KEYS)
-
-    targets = _normalize_targets_from_task_payload(payload)
-    unknown_targets = sorted([t for t in targets if t not in _TARGET_FEATURE_KEYS])
-    if unknown_targets:
-        raise ValueError(f"Unknown task target(s): {unknown_targets}")
-
-    raw_input = payload.get("input")
-    if not isinstance(raw_input, dict):
-        raise ValueError("Task config requires `input` mapping.")
-    _reject_unknown("task.input", set(raw_input), _TASK_INPUT_KEYS)
-
-    qasm_text = raw_input.get("qasm_text")
-    qasm_path = raw_input.get("qasm_path")
-    if bool(qasm_text) == bool(qasm_path):
-        raise ValueError("Task config must provide exactly one of input.qasm_text or input.qasm_path.")
-    if require_solver_config and not raw_input.get("solver_config"):
-        raise ValueError("Task config requires input.solver_config.")
-    if require_device_config and not raw_input.get("device_config"):
-        raise ValueError("Task config requires input.device_config.")
-    if require_analyser_config and not raw_input.get("analyser_config"):
-        raise ValueError("Task config requires input.analyser_config.")
-
-    raw_output = payload.get("output", {}) or {}
-    if not isinstance(raw_output, dict):
-        raise ValueError("Task config `output` must be a mapping.")
-    _reject_unknown("task.output", set(raw_output), _TASK_OUTPUT_KEYS)
-    if not raw_output.get("out_dir"):
-        raise ValueError("Task config requires output.out_dir.")
-
-    raw_features = payload.get("features", {}) or {}
-    if not isinstance(raw_features, dict):
-        raise ValueError("Task config `features` must be a mapping.")
-    _reject_unknown("task.features", set(raw_features), _TASK_FEATURE_KEYS)
-
-    allowed_feature_keys: set[str] = set()
-    for t in targets:
-        allowed_feature_keys.update(_TARGET_FEATURE_KEYS[t])
-    disallowed_feature_keys = sorted(set(raw_features) - allowed_feature_keys)
-    if disallowed_feature_keys:
-        raise ValueError(
-            "Task features contain keys not supported by selected target(s): "
-            f"{disallowed_feature_keys}; targets={targets}"
-        )
-
-    return targets
-
-
 def _validate_solver_payload(payload: dict[str, Any]) -> str:
     _reject_unknown("solver top-level", set(payload), _SOLVER_TOP_KEYS)
     raw_backend = payload.get("backend", {}) or {}
@@ -505,74 +366,33 @@ def _validate_pulse_payload(payload: dict[str, Any]) -> None:
         raise ValueError("Pulse config `pulse` must be a mapping.")
 
 
-def load_task_config_file(
-    path: str | Path,
-    *,
-    require_solver_config: bool = True,
-    require_device_config: bool = True,
-    require_analyser_config: bool = True,
-) -> TaskConfig:
-    """Load a task config file into ``WorkflowTaskConfig``.
+def circuit_from_payload(payload: dict[str, Any], base_dir: Path | None = None) -> CircuitConfig:
+    """Convert a circuit payload dictionary into a ``CircuitConfig`` object."""
+    payload = _map_circuit_payload(payload)
+    _reject_unknown("circuit top-level", set(payload), _CIRCUIT_TOP_KEYS - {"circuit"})
 
-    The task config is the workflow-facing entry file that describes targets,
-    input references, optional features, and output policy.
-
-    Args:
-        path: Path to a JSON or YAML task config file.
-        require_solver_config: Whether ``input.solver_config`` must be present
-            when no external override is provided.
-        require_device_config: Whether ``input.device_config`` must be present
-            when no external override is provided.
-
-    Returns:
-        Parsed and validated ``WorkflowTaskConfig``.
-    """
-    cfg_path, payload = _load_mapping(path)
-    payload = _apply_template("tasks", payload)
-    if _is_v3_task_payload(payload):
-        payload = _map_v3_task_payload(payload)
-    base_dir = cfg_path.parent
-
-    targets = _validate_task_payload(
-        payload,
-        require_solver_config=require_solver_config,
-        require_device_config=require_device_config,
-        require_analyser_config=require_analyser_config,
-    )
-    raw_input = dict(payload.get("input", {}) or {})
-
-    qasm_text = raw_input.get("qasm_text")
-    qasm_path = raw_input.get("qasm_path")
+    qasm_text = payload.get("qasm_text")
+    qasm_path = payload.get("qasm_path")
+    if bool(qasm_text) == bool(qasm_path):
+        raise ValueError("Circuit config must provide exactly one of qasm_text or qasm_path.")
     if qasm_path:
+        if base_dir is None:
+            raise ValueError("base_dir is required to resolve qasm_path in circuit payload.")
         qasm_full = Path(_resolve_path(base_dir, str(qasm_path)))
         qasm_text = qasm_full.read_text(encoding="utf-8")
 
-    task = TaskConfig(
-        target=targets,
-        input=TaskInputConfig(
-            qasm_text=str(qasm_text),
-            solver_config_path=_resolve_path(base_dir, _optional_text(raw_input.get("solver_config"))),
-            device_config_path=_resolve_path(base_dir, _optional_text(raw_input.get("device_config"))),
-            pulse_config_path=_resolve_path(base_dir, _optional_text(raw_input.get("pulse_config"))),
-            analyser_config_path=_resolve_path(base_dir, _optional_text(raw_input.get("analyser_config"))),
-            param_bindings=dict(raw_input.get("param_bindings", {}) or {}) or None,
-        ),
-        features=WorkflowFeatureFlags(**dict(payload.get("features", {}) or {})),
-        output=WorkflowOutputOptions(**dict(payload.get("output", {}) or {})),
-        tags=list(payload.get("tags", []) or []),
+    return CircuitConfig(
+        qasm_text=str(qasm_text),
+        param_bindings=dict(payload.get("param_bindings", {}) or {}) or None,
     )
-    task.output.out_dir = _resolve_path(base_dir, task.output.out_dir) or task.output.out_dir
-    task.output.session_dir = _resolve_path(base_dir, task.output.session_dir)
-    return task
 
 
-def load_solver_config_file(path: str | Path) -> SolverConfig:
-    """Load a solver config file into ``WorkflowSolverConfig``.
-
-    The solver config controls the backend model level, runtime engine
-    selection, solver options, and reference-frame settings.
-    """
+def load_circuit_config_file(path: str | Path) -> CircuitConfig:
+    """Load a circuit config file into ``CircuitConfig``."""
     cfg_path, payload = _load_mapping(path)
+    return circuit_from_payload(payload, base_dir=cfg_path.parent)
+def solver_from_payload(payload: dict[str, Any], base_dir: Path | None = None) -> SolverConfig:
+    """Convert a solver payload dictionary into a ``SolverConfig`` object."""
     payload = _apply_template("solvers", payload)
     if _is_v3_solver_payload(payload):
         solver = dict(payload.get("solver", {}) or {})
@@ -594,13 +414,12 @@ def load_solver_config_file(path: str | Path) -> SolverConfig:
             frame=WorkflowFrameOptions(),
             study=raw_study,
         )
-        if raw_run.get("julia_bin"):
-            solver_cfg.run.julia_bin = _resolve_path(cfg_path.parent, str(raw_run["julia_bin"]))
-        if raw_run.get("julia_depot_path"):
-            solver_cfg.run.julia_depot_path = _resolve_path(cfg_path.parent, str(raw_run["julia_depot_path"]))
+        if raw_run.get("julia_bin") and base_dir:
+            solver_cfg.run.julia_bin = _resolve_path(base_dir, str(raw_run["julia_bin"]))
+        if raw_run.get("julia_depot_path") and base_dir:
+            solver_cfg.run.julia_depot_path = _resolve_path(base_dir, str(raw_run["julia_depot_path"]))
         validate_backend_config(solver_cfg.to_backend_config())
         return solver_cfg
-    base_dir = cfg_path.parent
 
     _validate_solver_payload(payload)
     raw_backend = dict(payload.get("backend", {}) or {})
@@ -612,9 +431,9 @@ def load_solver_config_file(path: str | Path) -> SolverConfig:
     if "schedule" in raw_run and "schedule_policy" not in raw_run:
         raw_run["schedule_policy"] = raw_run["schedule"]
 
-    if raw_run.get("julia_bin"):
+    if raw_run.get("julia_bin") and base_dir:
         raw_run["julia_bin"] = _resolve_path(base_dir, str(raw_run["julia_bin"]))
-    if raw_run.get("julia_depot_path"):
+    if raw_run.get("julia_depot_path") and base_dir:
         raw_run["julia_depot_path"] = _resolve_path(base_dir, str(raw_run["julia_depot_path"]))
 
     solver_cfg = SolverConfig(
@@ -627,12 +446,18 @@ def load_solver_config_file(path: str | Path) -> SolverConfig:
     return solver_cfg
 
 
-def load_device_config_file(path: str | Path) -> DeviceConfig:
-    """Load a device config file into ``WorkflowDeviceConfig``.
+def load_solver_config_file(path: str | Path) -> SolverConfig:
+    """Load a solver config file into ``WorkflowSolverConfig``.
 
-    Device configs contain device-level parameters and noise model settings.
+    The solver config controls the backend model level, runtime engine
+    selection, solver options, and reference-frame settings.
     """
-    _cfg_path, payload = _load_mapping(path)
+    cfg_path, payload = _load_mapping(path)
+    return solver_from_payload(payload, base_dir=cfg_path.parent)
+
+
+def device_from_payload(payload: dict[str, Any]) -> DeviceConfig:
+    """Convert a device payload dictionary into a ``DeviceConfig`` object."""
     payload = _apply_template("device", payload)
 
     _validate_device_payload(payload)
@@ -646,14 +471,17 @@ def load_device_config_file(path: str | Path) -> DeviceConfig:
     )
 
 
-def load_pulse_config_file(path: str | Path) -> dict[str, Any]:
-    """Load a pulse config file.
+def load_device_config_file(path: str | Path) -> DeviceConfig:
+    """Load a device config file into ``WorkflowDeviceConfig``.
 
-    Pulse configs contain gate duration, carrier frequency, readout, and reset
-    pulse parameters. The returned mapping is later merged into
-    ``WorkflowDeviceConfig.pulse``.
+    Device configs contain device-level parameters and noise model settings.
     """
-    _cfg_path, payload = _load_mapping(path)
+    _, payload = _load_mapping(path)
+    return device_from_payload(payload)
+
+
+def pulse_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert a pulse payload dictionary into a pulse configuration mapping."""
     payload = _apply_template("pulses", payload)
     _validate_pulse_payload(payload)
     raw_pulse = dict(payload.get("pulse", {}) or {})
@@ -662,9 +490,19 @@ def load_pulse_config_file(path: str | Path) -> dict[str, Any]:
     return raw_pulse
 
 
-def load_analyser_config_file(path: str | Path) -> AnalyserConfig:
-    """Load an analyser config file into ``DefaultAnalyserConfig``."""
-    _cfg_path, payload = _load_mapping(path)
+def load_pulse_config_file(path: str | Path) -> dict[str, Any]:
+    """Load a pulse config file.
+
+    Pulse configs contain gate duration, carrier frequency, readout, and reset
+    pulse parameters. The returned mapping is later merged into
+    ``WorkflowDeviceConfig.pulse``.
+    """
+    _, payload = _load_mapping(path)
+    return pulse_from_payload(payload)
+
+
+def analyser_from_payload(payload: dict[str, Any]) -> AnalyserConfig:
+    """Convert an analyser payload dictionary into an ``AnalyserConfig`` object."""
     _reject_unknown("analyser top-level", set(payload), _ANALYSER_TOP_KEYS)
 
     trajectory_raw = dict(payload.get("trajectory", {}) or {})
@@ -703,42 +541,107 @@ def load_analyser_config_file(path: str | Path) -> AnalyserConfig:
     )
 
 
-def load_task_file(path: str | Path) -> TaskConfig:
-    """Compatibility alias: load task-config only."""
-    return load_task_config_file(path)
+def profile_from_payload(payload: dict[str, Any]) -> ProfileConfig:
+    """Convert a profile payload dictionary into a ``ProfileConfig`` object."""
+    return ProfileConfig(**payload)
+
+def sweep_from_payload(payload: Any) -> ParameterSweepConfig:
+    """Convert payload to typed ParameterSweepConfig."""
+    if not isinstance(payload, dict):
+        raise TypeError(f"Sweep payload must be a dict, got {type(payload)}")
+
+    # Check if it's the simplified format: {'theta': [0, 0.1, ...]}
+    if "parameters" not in payload and any(isinstance(v, (list, tuple)) for v in payload.values()):
+        # Simplified format: convert to full format
+        payload = {
+            "parameters": {
+                k: {"target": k, "values": v} for k, v in payload.items()
+            },
+            "mode": None,
+            "metadata": {}
+        }
+
+    params_raw = payload.get("parameters", {})
+    parameters = {}
+    for p_id, p_val in params_raw.items():
+        if not isinstance(p_val, dict):
+            parameters[p_id] = ParameterList(target=p_id, values=list(p_val))
+        else:
+            parameters[p_id] = ParameterList(
+                target=str(p_val.get("target", p_id)).strip(),
+                values=list(p_val.get("values", [])),
+                unit=str(p_val.get("unit", "")).strip() or None,
+                description=str(p_val.get("description", "")).strip() or None,
+            )
+
+    return ParameterSweepConfig(
+        parameters=parameters,
+        mode=str(payload.get("mode", "")).strip().lower() or None,
+        metadata=dict(payload.get("metadata", {}) or {}),
+    )
 
 
+def load_analyser_config_file(path: str | Path) -> AnalyserConfig:
+    """Load an analyser config file into ``DefaultAnalyserConfig``."""
+    _, payload = _load_mapping(path)
+    return analyser_from_payload(payload)
+
+
+def load_config(source: str | Path | dict[str, Any], config_type: str, base_dir: Path | None = None) -> Any:
+    """
+    Unified dispatcher to load a configuration from a file or a dictionary payload.
+
+    Args:
+        source: Path to the config file or the config dictionary itself.
+        config_type: Type of the config ("circuit", "solver", "device", "pulse", "analyser").
+        base_dir: Optional base directory for resolving relative paths within the config.
+    """
+    payload = source
+    if isinstance(source, (str, Path)):
+        # If it's a path, load the mapping first
+        p, payload = _load_mapping(source)
+        # Use the file's directory as base_dir if none was provided
+        if base_dir is None:
+            base_dir = p.parent
+
+    type_map = {
+        "circuit": (circuit_from_payload, True),
+        "solver": (solver_from_payload, True),
+        "device": (device_from_payload, False),
+        "pulse": (pulse_from_payload, False),
+        "analyser": (analyser_from_payload, False),
+        "profile": (profile_from_payload, False),
+        "sweep": (sweep_from_payload, False),
+    }
+
+    if config_type not in type_map:
+        raise ValueError(f"Unsupported config_type: {config_type}. Supported: {list(type_map.keys())}")
+
+    converter, needs_base_dir = type_map[config_type]
+
+    if needs_base_dir:
+        return converter(payload, base_dir=base_dir)
+    return converter(payload)
 def load_config_bundle_files(
     *,
-    task_config: str | Path,
-    solver_config: str | Path | None = None,
-    device_config: str | Path | None = None,
+    circuit_config: str | Path,
+    solver_config: str | Path,
+    device_config: str | Path,
     pulse_config: str | Path | None = None,
     analyser_config: str | Path | None = None,
 ) -> Task:
-    """Load and compose a 5-file config bundle into ``WorkflowTask``.
+    """Load and compose a resource-first config bundle into ``WorkflowTask``.
 
     This is the main file-driven composition helper used by the model API.
     """
-    task_cfg = load_task_config_file(
-        task_config,
-        require_solver_config=(solver_config is None),
-        require_device_config=(device_config is None),
-        require_analyser_config=(analyser_config is None),
-    )
-    solver_path = str(solver_config) if solver_config is not None else task_cfg.input.solver_config_path
-    device_path = str(device_config) if device_config is not None else task_cfg.input.device_config_path
-    pulse_path = str(pulse_config) if pulse_config is not None else task_cfg.input.pulse_config_path
-    analyser_path = str(analyser_config) if analyser_config is not None else task_cfg.input.analyser_config_path
-    if not solver_path:
-        raise ValueError("Task input must provide solver_config, or pass solver_config override.")
-    if not device_path:
-        raise ValueError("Task input must provide device_config, or pass device_config override.")
-    if not analyser_path:
-        raise ValueError("Task input must provide analyser_config, or pass analyser_config override.")
+    circuit_cfg = load_circuit_config_file(circuit_config)
+    solver_path = str(solver_config)
+    device_path = str(device_config)
+    pulse_path = str(pulse_config) if pulse_config is not None else None
+    analyser_path = str(analyser_config) if analyser_config is not None else None
     solver_cfg = load_solver_config_file(solver_path)
     device_cfg = load_device_config_file(device_path)
-    analyser_cfg = load_analyser_config_file(analyser_path)
+    analyser_cfg = load_analyser_config_file(analyser_path) if analyser_path else None
     if pulse_path:
         pulse_payload = load_pulse_config_file(pulse_path)
         def _split_payload(raw: dict[str, Any], known: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -791,10 +694,15 @@ def load_config_bundle_files(
             extras=extras or None,
         )
     return compose_workflow_task(
-        task_cfg,
-        solver_cfg,
-        device_cfg,
-        analyser_cfg,
+        target="trajectory",
+        features=WorkflowFeatureFlags(),
+        output=WorkflowOutputOptions(),
+        tags=[],
+        circuit_cfg=circuit_cfg,
+        solver_cfg=solver_cfg,
+        device_cfg=device_cfg,
+        analyser_cfg=analyser_cfg,
+        model_pulse=device_cfg.pulse,
         backend_source=str(Path(solver_path).resolve()),
     )
 
@@ -802,9 +710,16 @@ def load_config_bundle_files(
 __all__ = [
     "load_config_bundle_files",
     "load_analyser_config_file",
+    "load_circuit_config_file",
     "load_device_config_file",
     "load_pulse_config_file",
     "load_solver_config_file",
-    "load_task_config_file",
-    "load_task_file",
+    "load_config",
+    "circuit_from_payload",
+    "solver_from_payload",
+    "device_from_payload",
+    "pulse_from_payload",
+    "analyser_from_payload",
+    "profile_from_payload",
+    "sweep_from_payload",
 ]

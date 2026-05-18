@@ -11,6 +11,7 @@ from pathlib import Path
 from musiq.analysis.state_utils import final_density_matrix, state_fidelity
 from musiq.workflow.contracts import (
     AnalyserConfig,
+    CircuitConfig,
     DeviceConfig,
     SolverConfig,
     Task,
@@ -48,8 +49,8 @@ from musiq.workflow.model_utils import (
     effective_analyser_payload,
     require_solver_id,
     require_analyser_id,
-    format_study_id,
 )
+from musiq.common.id_generator import IDGenerator
 
 
 def _merge_param_bindings(base: dict[str, Any] | None, override: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -129,45 +130,39 @@ def run_one_solver_study(
     study: dict[str, Any],
     study_index: int | None,
     total_studies: int,
-) -> str:
-    """Orchestrate compilation and execution for one study step."""
-    # 1. Plan the expansion to find the correct compilation unit (run_id)
+    tag: str | None = None,
+) -> list[str]:
+    """Orchestrate compilation and execution for one study step across all applicable runs."""
+    # 1. Plan the expansion to find all compilation units (run_ids) that use this solver
     plan = StudyPlanner.plan(model)
     
-    # Find the run_id that corresponds to this solver and this study step
-    # The StudyPlanner uses model.config. In this context, we identify 
-    # the run_id based on the solver_id and the fact that it's part of the study.
-    # Since we are running one study step, we need the run_id that contains 
-    # the samples for this solver.
+    # Find all run_ids in the plan that belong to this solver
+    target_run_ids = [
+        rid for rid, samples in plan.run_groups.items()
+        if samples and samples[0].solver_id == solver_id
+    ]
     
-    # Find the run_id in the plan that belongs to this solver
-    # StudyPlanner run_id format: f"run_{t_id}_{d_id}_{p_id}_{s_id}"
-    target_run_id = None
-    for rid, samples in plan.run_groups.items():
-        if samples and samples[0].solver_id == solver_id:
-            target_run_id = rid
-            break
-    
-    if not target_run_id:
-        raise RuntimeError(f"Could not resolve run_id for solver {solver_id} from study plan")
+    if not target_run_ids:
+        raise RuntimeError(f"Could not resolve run_ids for solver {solver_id} from study plan")
 
-    # 2. Ensure compilation unit exists
-    if target_run_id not in model.runs:
-        # Get the first sample to use as a template for compilation
-        sample = plan.run_groups[target_run_id][0]
-        model.runs[target_run_id] = execute_compilation_unit(model, sample)
+    # 2. Process each run group (e.g., different tasks using the same solver)
+    for rid in target_run_ids:
+        if rid not in model.runs:
+            # Get the first sample to use as a template for compilation.
+            sample = plan.run_groups[rid][0]
+            model.runs[rid] = execute_compilation_unit(model, sample, run_id=rid, tag=tag)
 
-    run_obj = model.runs[target_run_id]
+        run_obj = model.runs[rid]
+        
+        # 3. Execute all samples in this compilation unit
+        for sample in plan.run_groups[rid]:
+            run_sample(model, run_obj, sample)
+        
+        # Update run identity to reflect the specific study step being run
+        run_obj.identity.study_index = study_index
+        run_obj.identity.study_name = study.get("name") or IDGenerator.next_study_name(run_obj)
     
-    # 3. Execute all samples in this compilation unit
-    for sample in plan.run_groups[target_run_id]:
-        run_sample(model, run_obj, sample)
-    
-    # Update run identity to reflect the specific study step being run
-    run_obj.identity.study_index = study_index
-    run_obj.identity.study_name = study.get("name") or (f"step_{study_index}" if study_index is not None else "default")
-    
-    return target_run_id
+    return target_run_ids
 
 
 def get_study_entries(solver_cfg: SolverConfig) -> list[tuple[int | None, dict[str, Any]]]:
@@ -322,32 +317,36 @@ def build_multi_study_iq_summary(model: Any, analysis_items: list[tuple[Any, Mod
 def compose_runtime_task(
     model: Any,
     *,
+    circuit_cfg: CircuitConfig,
     solver_cfg: SolverConfig,
+    device_cfg: DeviceConfig,
+    pulse_cfg: Any,
     analyser_cfg: AnalyserConfig | None,
+    backend_source: str | None = None,
 ) -> Task:
-    # Use a clean DeviceConfig container for the builder
-    device_cfg = DeviceConfig(
-        device=model.device.device,
-        pulse=model.device.pulse,
-        noise=model.device.noise,
-    )
-    
     return compose_workflow_task(
-        task_cfg=model.task,
+        target=model.config.target,
+        features=model.config.features,
+        output=model.config.output,
+        tags=model.config.tags,
+        circuit_cfg=circuit_cfg,
         solver_cfg=solver_cfg,
         device_cfg=device_cfg,
         analyser_cfg=analyser_cfg,
-        model_pulse=model.pulse,
-        backend_source=model.task.input.solver_config_path,
+        model_pulse=pulse_cfg,
+        backend_source=backend_source,
     )
 
 def execute_compilation_unit(
     model: Any,
     sample: StudySample,
+    *,
+    run_id: str | None = None,
+    tag: str | None = None,
 ) -> ModelRun:
     """Handle the STAGE_PARSE part and create a ModelRun compilation unit."""
     # Determine which config resources to use
-    task_cfg = model.config.tasks[sample.task_id]
+    circuit_cfg = model.config.circuits[sample.circuit_id]
     device_cfg = model.config.devices[sample.device_id]
     pulse_cfg = model.config.pulses[sample.pulse_id]
     solver_cfg = model.config.solvers[sample.solver_id]
@@ -356,13 +355,15 @@ def execute_compilation_unit(
     # For compilation, we use the default values; ParametricValue is handled at execution
     task = compose_runtime_task(
         model, 
+        circuit_cfg=circuit_cfg,
         solver_cfg=solver_cfg, 
+        device_cfg=device_cfg,
+        pulse_cfg=pulse_cfg,
         analyser_cfg=None # Analysers are bound at analysis stage
     )
     
-    # Simplified run_id to avoid "run_default_default_default_..."
-    # If only one combination exists, this is just run_{solver_id}
-    run_id = f"run_{sample.solver_id}"
+    # Use auto-incrementing run_id to ensure uniqueness unless the planner reserved one.
+    run_id = run_id or IDGenerator.next_run_id(model, tag=tag)
     out = resolve_writable_out_dir(Path(task.output.out_dir))
     model.out_dir = str(out)
     
@@ -427,8 +428,8 @@ def run_sample(
     sample: StudySample,
 ) -> str:
     """Execute a single numerical sample within a compilation unit."""
-    # Rename results key from 'sample_n' to 'param_n'
-    param_id = f"param_{len(run_obj.results)}"
+    # Use auto-incrementing param_id
+    param_id = IDGenerator.next_param_id(run_obj)
     
     sample_model_spec = run_obj.artifacts.model_spec
     sample_param_bindings = _merge_param_bindings(
@@ -505,8 +506,8 @@ def run_sample(
             study_name=None,
             study_index=None,
         ),
-        # Rename trajectory key from 'sample_n' to 'shot_n'
-        trajectories={"shot_0": trajectory},
+        # Use auto-incrementing shot_id
+        trajectories={IDGenerator.next_shot_id(run_obj): trajectory},
         runtime_metadata={
             'engine_used': trajectory.engine,
             'param_id': param_id,
@@ -523,9 +524,10 @@ def run_study(
     solver_id: str | None = None,
     study_name_val: str | None = None,
     study_index: int | None = None,
+    tag: str | None = None,
 ) -> str:
     selected_solver_id = require_solver_id(model, solver_id)
-    solver_cfg = model.solvers[selected_solver_id]
+    solver_cfg = model.solvers[selected_solver_id].config
     entries = get_study_entries(solver_cfg)
     chosen_index: int | None = None
     chosen_study: dict[str, Any] | None = None
@@ -551,13 +553,7 @@ def run_study(
             raise ValueError(f'study_name or study_index is required for solver `{selected_solver_id}` with multiple study steps.')
         chosen_index, chosen_study = entries[0]
     assert chosen_study is not None
-    run_id = format_study_id(
-        selected_solver_id,
-        study=chosen_study,
-        study_index=chosen_index,
-        total_studies=len(entries),
-    )
-    model.runs.pop(run_id, None)
+    chosen_study_name = str(study_name(chosen_study, chosen_index) or "").strip()
     return run_one_solver_study(
         model,
         solver_id=selected_solver_id,
@@ -565,17 +561,13 @@ def run_study(
         study=chosen_study,
         study_index=chosen_index,
         total_studies=len(entries),
+        tag=tag,
     )
 
-def run_solver(model: Any, solver_id: str | None = None) -> None:
+def run_solver(model: Any, solver_id: str | None = None, tag: str | None = None) -> None:
     selected_solver_id = require_solver_id(model, solver_id)
-    solver_cfg = model.solvers[selected_solver_id]
+    solver_cfg = model.solvers[selected_solver_id].config
     
-    for run_id in list(model.runs.keys()):
-        run_obj = model.runs[run_id]
-        if run_obj.identity.solver_id == selected_solver_id:
-            model.runs.pop(run_id, None)
-            
     entries = get_study_entries(solver_cfg)
     for idx, step in entries:
         run_one_solver_study(
@@ -585,9 +577,10 @@ def run_solver(model: Any, solver_id: str | None = None) -> None:
             study=dict(step),
             study_index=idx,
             total_studies=len(entries),
+            tag=tag,
         )
 
-def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: str | None = None) -> None:
+def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: str | None = None, tag: str | None = None) -> None:
     selected_analyser_id = require_analyser_id(model, analyser_id)
     analyser_cfg = model.analysers[selected_analyser_id]
     selected_solver_id = require_solver_id(model, analyser_cfg.solver_id)
@@ -623,45 +616,43 @@ def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: 
         started_at = time.perf_counter()
         from musiq.workflow.contracts import build_effective_pulse_config
         
-        # Analyze EVERY parameter result in this run
-        for param_id, run_result in solver_run.results.items():
-            # Use the first available trajectory regardless of the key (e.g., 'shot_0')
-            trajectory = next(iter(run_result.trajectories.values()), None)
-            if trajectory is None:
-                continue
+        # Analyze only the first available parameter result to maintain 1:1 run-to-case mapping
+        if not solver_run.results:
+            continue
+            
+        param_id = next(iter(solver_run.results))
+        run_result = solver_run.results[param_id]
+        
+        # Use the first available trajectory regardless of the key (e.g., 'shot_0')
+        trajectory = next(iter(run_result.trajectories.values()), None)
+        if trajectory is None:
+            continue
 
-            analyzed = run_analysis_stage(
-                trajectory=trajectory,
-                model_spec=solver_run.artifacts.model_spec,
-                pulse_ir=solver_run.artifacts.pulse_ir,
-                pulse_cfg=build_effective_pulse_config(model.device, model.pulse),
-                cfg=cfg,
-                logical_error=logical_error,
-                analyser_cfg=analyser_cfg.to_payload(),
-                metric_registry=model.metric_registry,
-            )
-            
-            output = analyzed.get('analysis')
-            
-            # Create a unique ID for this case analysis (include param_id)
-            # We use format_study_id but add the param_id to differentiate points in the same run
-            base_analysis_id = format_study_id(
-                selected_analyser_id,
-                study={"name": solver_run.identity.study_name} if solver_run.identity.study_name else {},
-                study_index=solver_run.identity.study_index,
-                total_studies=total_studies,
-            )
-            analysis_run_id = f"{base_analysis_id}_{param_id}" if "param_" in param_id else f"{base_analysis_id}_{param_id}"
-            
-            analysis_result = ModelAnalysis(
-                analysis_id=analysis_run_id,
-                analyser_id=selected_analyser_id,
-                input_results=[ResultRef(run_id=run_id, parameter_id=param_id)],
-                scope=AnalysisScope.CASE,
-                output=output,
-            )
-            model.analyses[analysis_run_id] = analysis_result
-            per_study_analyses.append((solver_run, analysis_result))
+        analyzed = run_analysis_stage(
+            trajectory=trajectory,
+            model_spec=solver_run.artifacts.model_spec,
+            pulse_ir=solver_run.artifacts.pulse_ir,
+            pulse_cfg=build_effective_pulse_config(model.device, model.pulse),
+            cfg=cfg,
+            logical_error=logical_error,
+            analyser_cfg=analyser_cfg.to_payload(),
+            metric_registry=model.metric_registry,
+        )
+        
+        output = analyzed.get('analysis')
+        
+        # Use auto-incrementing analysis ID based on scope
+        analysis_run_id = IDGenerator.next_analysis_id(model, scope="case", tag=tag)
+        
+        analysis_result = ModelAnalysis(
+            analysis_id=analysis_run_id,
+            analyser_id=selected_analyser_id,
+            input_results=[ResultRef(run_id=run_id, parameter_id=param_id)],
+            scope=AnalysisScope.CASE,
+            output=output,
+        )
+        model.analyses[analysis_run_id] = analysis_result
+        per_study_analyses.append((solver_run, analysis_result))
         
         # Update timings in artifacts, not in result metadata
         if solver_run.artifacts:
@@ -671,91 +662,129 @@ def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: 
         return
 
     if study_name_val is None:
-        # We trigger ParametricAnalysis if there are multiple parameter points across all runs
-        if len(per_study_analyses) == 1:
-            # Only one parameter point in total, the result is just a CaseAnalysis
-            model.analyses[selected_analyser_id] = per_study_analyses[0][1]
-        else:
-            # 1. Build the ParametricAnalysis object
-            parametric_out = ParametricAnalysis()
-            summary_results = []
-
-            # Define parameter axes from config
-            param_cfg = model.config.parameter_list
-            if param_cfg:
-                for p_name, p_list in param_cfg.parameters.items():
-                    parametric_out.parameters[p_name] = ParameterAxis(
-                        parameter_name=p_name,
-                        values=p_list.values,
-                        unit=p_list.unit
-                    )
-
-            # Aggregate final values for parametric analysis
-            metrics_sweep: dict[str, MetricSweepValues] = {}
-            
-            # Determine which metrics to collect for the sweep
-            # Use analyser_cfg.parametric_metrics if available, else fallback to metrics
-            payload = analyser_cfg.to_payload()
-            sweep_targets = payload.get("sweep_metrics") or payload.get("case_metrics") or []
-            
-            if sweep_targets:
-                # We assume a single axis for now as per current StudyPlanner implementation
-                # but we build the dimensions list for extensibility
-                axes = list(parametric_out.parameters.keys())
+        # Trigger ParametricAnalysis per run if a sweep is defined and the run contains multiple points
+        param_cfg = model.config.parameter_list
+        has_sweep_def = param_cfg is not None and len(param_cfg.parameters) > 0
+        
+        if has_sweep_def:
+            for run_id, solver_run in matching_runs:
+                if len(solver_run.results) <= 1:
+                    continue
                 
-                for target in sweep_targets:
-                    target_name = target if isinstance(target, str) else target.get("name", "unknown")
-                    
-                    # Collect the final value of this metric from each CaseAnalysis
-                    values_list = []
-                    for run_obj, analysis in per_study_analyses:
-                        ref = analysis.input_results[0]
-                        param_id = ref.parameter_id
-                        summary_results.append(ref) # Moved inside target loop for consistency or outside
+                # 1. Build the ParametricAnalysis object for this specific run
+                parametric_out = ParametricAnalysis()
+                summary_results = []
 
-                        run_result = run_obj.results.get(param_id)
-                        if str(target_name).strip().lower() == "final_fidelity":
-                            values_list.append(_extract_final_fidelity(run_result))
-                        else:
-                            values_list.append(_extract_case_metric_terminal(analysis.output.metrics, target_name))
+                # Define parameter axes from config
+                for p_name, p_list in param_cfg.parameters.items():
+                    if len(p_list.values) > 1:
+                        parametric_out.parameters[p_name] = ParameterAxis(
+                            parameter_name=p_name,
+                            values=p_list.values,
+                            unit=p_list.unit
+                        )
+
+                # Aggregate final values for parametric analysis
+                metrics_sweep: dict[str, MetricSweepValues] = {}
+                payload = analyser_cfg.to_payload()
+                sweep_targets = payload.get("sweep_metrics") or payload.get("case_metrics") or []
+                
+                if sweep_targets:
+                    axes = list(parametric_out.parameters.keys())
                     
-                    metrics_sweep[target_name] = MetricSweepValues(
-                        metric_name=target_name,
-                        dimensions=axes,
-                        values=values_list
+                    # We need to iterate through all results in THIS run
+                    # and align them with the parameter axes values.
+                    # Current implementation assumes a simple linear sweep.
+                    all_results = solver_run.results
+                    
+                    for target in sweep_targets:
+                        target_name = target if isinstance(target, str) else target.get("name", "unknown")
+                        values_list = []
+                        
+                        # In a real multi-dim sweep, we'd sort results by the axes values.
+                        # For now, we assume results are added in the order of the sweep.
+                        for param_id, run_result in all_results.items():
+                            # We can't use CaseAnalysis because we didn't run run_analysis_stage for every point.
+                            # We must calculate the metric on the fly or run the stage.
+                            # To be efficient, if it's a known terminal metric, we extract it.
+                            # Otherwise, we should ideally run the analyser for this point.
+                            
+                            # To correctly get metrics for ALL points, we need the analyst's logic.
+                            # Since run_analysis_stage is the entry point, let's use it.
+                            trajectory = next(iter(run_result.trajectories.values()), None)
+                            if trajectory is None:
+                                values_list.append(0.0)
+                                continue
+                            
+                            # Run a quick analysis for this specific point
+                            point_analysis = run_analysis_stage(
+                                trajectory=trajectory,
+                                model_spec=solver_run.artifacts.model_spec,
+                                pulse_ir=solver_run.artifacts.pulse_ir,
+                                pulse_cfg=None, # Using None as fallback or we could build it
+                                cfg=getattr(solver_run.runtime_task, 'input', None).backend_config,
+                                logical_error=None,
+                                analyser_cfg=payload,
+                                metric_registry=model.metric_registry,
+                            )
+                            
+                            metrics_map = point_analysis.get('analysis', {}).get('metrics', {})
+                            if str(target_name).strip().lower() == "final_fidelity":
+                                values_list.append(_extract_final_fidelity(run_result))
+                            else:
+                                values_list.append(_extract_case_metric_terminal(metrics_map, target_name))
+                            
+                            summary_results.append(ResultRef(run_id=run_id, parameter_id=param_id))
+                        
+                        metrics_sweep[target_name] = MetricSweepValues(
+                            metric_name=target_name,
+                            dimensions=axes,
+                            values=values_list
+                        )
+            
+                # Re-calculating summary_results to be unique
+                summary_results = list(dict.fromkeys(summary_results))
+
+                parametric_out.metrics = metrics_sweep
+                parametric_out.input_results = summary_results
+
+                # 2. Handle higher-level summary (ComprehensiveAnalysis)
+                # We pass the results of this specific run to the summary builder
+                current_run_analyses = [
+                    (solver_run, ModelAnalysis(
+                        analysis_id="temp", 
+                        analyser_id=selected_analyser_id, 
+                        input_results=[ResultRef(run_id=run_id, parameter_id=pid)],
+                        scope=AnalysisScope.CASE,
+                        output=None # summary_iq_payload only needs identity/run_obj
+                    )) 
+                    for pid in solver_run.results
+                ]
+                summary_iq_payload = build_multi_study_iq_summary(model, current_run_analyses)
+                
+                if summary_iq_payload is not None:
+                    comprehensive_out = ComprehensiveAnalysis(
+                        parametric_analyses={"main": parametric_out},
+                        cross_analysis={"iq_summary": summary_iq_payload},
+                        input_sweeps=[ResultRef(run_id=run_id, parameter_id="summary")]
                     )
-            
-            # Note: summary_results needs to be uniquely populated
-            # Re-calculating summary_results based on the analysis order
-            summary_results = [a.input_results[0] for _, a in per_study_analyses]
-
-            parametric_out.metrics = metrics_sweep
-            parametric_out.input_results = summary_results
-
-            # 2. Handle higher-level summary (ComprehensiveAnalysis)
-            summary_iq_payload = build_multi_study_iq_summary(model, per_study_analyses)
-            
-            if summary_iq_payload is not None:
-                comprehensive_out = ComprehensiveAnalysis(
-                    parametric_analyses={"main": parametric_out},
-                    cross_analysis={"iq_summary": summary_iq_payload},
-                    input_sweeps=[ResultRef(run_id=selected_analyser_id, parameter_id="summary")]
-                )
-                model.analyses[selected_analyser_id] = ModelAnalysis(
-                    analysis_id=selected_analyser_id,
-                    analyser_id=selected_analyser_id,
-                    input_results=summary_results,
-                    scope=AnalysisScope.COMPREHENSIVE,
-                    output=comprehensive_out,
-                )
-            else:
-                model.analyses[selected_analyser_id] = ModelAnalysis(
-                    analysis_id=selected_analyser_id,
-                    analyser_id=selected_analyser_id,
-                    input_results=summary_results,
-                    scope=AnalysisScope.PARAMETRIC,
-                    output=parametric_out,
-                )
+                    analysis_id = IDGenerator.next_analysis_id(model, scope="comprehensive", tag=tag)
+                    model.analyses[analysis_id] = ModelAnalysis(
+                        analysis_id=analysis_id,
+                        analyser_id=selected_analyser_id,
+                        input_results=summary_results,
+                        scope=AnalysisScope.COMPREHENSIVE,
+                        output=comprehensive_out,
+                    )
+                else:
+                    analysis_id = IDGenerator.next_analysis_id(model, scope="parametric", tag=tag)
+                    model.analyses[analysis_id] = ModelAnalysis(
+                        analysis_id=analysis_id,
+                        analyser_id=selected_analyser_id,
+                        input_results=summary_results,
+                        scope=AnalysisScope.PARAMETRIC,
+                        output=parametric_out,
+                    )
 
 def run_all(model: Any) -> None:
     for solver_id in sorted(model.solvers.keys()):

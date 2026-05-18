@@ -126,26 +126,22 @@ class Task:
 
 
 @dataclass(slots=True)
-class TaskInputConfig:
-    """Task-level input with references to solver/device/pulse config files."""
+class CircuitConfig:
+    """Static circuit input definition."""
 
     qasm_text: str
-    solver_config_path: str | None = None
-    device_config_path: str | None = None
-    pulse_config_path: str | None = None
-    analyser_config_path: str | None = None
     param_bindings: dict[str, float] | None = None
 
 
 @dataclass(slots=True)
-class TaskConfig:
-    """Task config: target + input/output/features."""
+class ProfileConfig:
+    """Named resource binding preset inside one ``ModelConfig``."""
 
-    target: str | list[str]
-    input: TaskInputConfig
-    output: WorkflowOutputOptions = field(default_factory=WorkflowOutputOptions)
-    features: WorkflowFeatureFlags = field(default_factory=WorkflowFeatureFlags)
-    tags: list[str] = field(default_factory=list)
+    circuit_id: str | None = None
+    device_id: str | None = None
+    pulse_id: str | None = None
+    solver_id: str | None = None
+    analyser_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -757,12 +753,16 @@ def build_effective_analyser_payload(analyser_cfg: AnalyserConfig | None, solver
     return analyser_cfg.to_payload()
 
 def compose_workflow_task(
-    task_cfg: TaskConfig,
+    *,
+    target: str | list[str],
+    features: WorkflowFeatureFlags,
+    output: WorkflowOutputOptions,
+    tags: list[str],
+    circuit_cfg: CircuitConfig,
     solver_cfg: SolverConfig,
     device_cfg: DeviceConfig,
     analyser_cfg: AnalyserConfig | None,
     model_pulse: PulseConfig,
-    *,
     backend_source: str | None = None,
 ) -> Task:
     """Compose task/solver/device/analyser configs into one runtime task contract."""
@@ -772,7 +772,7 @@ def compose_workflow_task(
     
     return Task(
         input=WorkflowInput(
-            qasm_text=task_cfg.input.qasm_text,
+            qasm_text=circuit_cfg.qasm_text,
             backend_path=backend_source,
             backend_config=solver_cfg.to_backend_config(noise=device_cfg.noise, runtime_level=runtime_level),
             device=runtime_device,
@@ -790,18 +790,18 @@ def compose_workflow_task(
                 else None
             ),
             noise=dict(device_cfg.noise or {}),
-            param_bindings=dict(task_cfg.input.param_bindings or {}) or None,
+            param_bindings=dict(circuit_cfg.param_bindings or {}) or None,
         ),
         run=run_cfg,
-        features=task_cfg.features,
-        output=task_cfg.output,
-        targets=normalize_targets(task_cfg.target),
-        tags=list(task_cfg.tags or []),
+        features=features,
+        output=output,
+        targets=normalize_targets(target),
+        tags=list(tags or []),
     )
 
 
 __all__ = [
-    "TaskInputConfig",
+    "CircuitConfig",
     "SolverBackendConfig",
     "WorkflowFeatureFlags",
     "DeviceConfig",
@@ -811,7 +811,6 @@ __all__ = [
     "WorkflowRunOptions",
     "SolverConfig",
     "Task",
-    "TaskConfig",
     "apply_composite_device_step_overrides",
     "compose_workflow_task",
     "extract_study_prep",

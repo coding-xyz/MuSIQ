@@ -1,0 +1,9 @@
+schema_version: "1.0"
+pulse:
+  gate_duration_ns: 40.0
+  xy_freq_Hz: 5.00e9
+  single_qubit_shape: drag
+  single_qubit_sigma_fraction: 0.1666666667
+  single_qubit_drag_beta: 0.25
+  rect_edge_ns: 2.0
+  schedule_policy: parallel

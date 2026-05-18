@@ -12,6 +12,7 @@ from musiq.schemas.results import CaseAnalysis, MetricSeries, ResultRef
 from musiq.schemas.solver import FrameSpec, SolverSpec, TimeSpec
 from musiq.schemas.system import SystemSpec
 from musiq.ui.result_summary import attach_compare_status, collect_pulse_metrics, summarize_workflow_result
+from musiq.workflow.model import Model, ModelConfig
 
 
 def test_collect_pulse_metrics_reads_first_matching_npz(tmp_path: Path):
@@ -129,3 +130,19 @@ def test_attach_compare_status_marks_mixed_encodings_for_review():
 
     assert set(annotated["compare_status"]) == {"semantic-review-needed"}
     assert set(annotated["compare_reason"]) == {"basis_population_single_qubit | per_qubit_excited_probability"}
+
+
+def test_model_get_analysis_resolves_generated_case_id_by_analyser_and_study():
+    model = Model(config=ModelConfig(circuits={}, devices={}, pulses={}, solvers={}, analysers={}))
+    model.config.analysers["analyser_0"] = SimpleNamespace(solver_id="solver_0")
+    model.runs["run_0"] = SimpleNamespace(identity=SimpleNamespace(study_name="ground"))
+    model.analyses["case_0"] = SimpleNamespace(
+        analysis_id="case_0",
+        analyser_id="analyser_0",
+        input_results=[ResultRef(run_id="run_0", parameter_id="param_0")],
+        scope="case",
+    )
+
+    analysis = model.get_analysis(analyser_id="analyser_0", study_name="ground")
+
+    assert analysis is model.analyses["case_0"]

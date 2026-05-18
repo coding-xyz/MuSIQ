@@ -24,7 +24,5 @@ solver:
       save_measurement_records: false
     metrics:
       - population
-      - mean_excited
-      - variance
   schedule:
     policy: serial

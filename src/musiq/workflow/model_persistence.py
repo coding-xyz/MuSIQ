@@ -34,10 +34,11 @@ from musiq.schemas.noise import NoiseSpec
 from musiq.schemas.readout import ReadoutSpec
 from musiq.schemas.circuit import CircuitSpec
 from musiq.workflow.contracts import (
+    AnalyserConfig,
     PulseAcquisitionConfig,
+    ProfileConfig,
     PulseChannelConfig,
     PulseTimingConfig,
-    TaskInputConfig,
     WorkflowFeatureFlags,
     WorkflowFrameOptions,
     WorkflowInput,
@@ -47,6 +48,7 @@ from musiq.workflow.contracts import (
     SolverConfig,
     Task,
 )
+from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.workflow.output import write_trajectory_h5
 from musiq.pulse.visualize import load_trajectory_h5
 
@@ -112,6 +114,37 @@ def _restore_workflow_task(payload: dict[str, Any] | None) -> Task:
         targets=list(raw.get("targets", []) or []) or None,
         tags=list(raw.get("tags", []) or []),
     )
+
+
+def _restore_parameter_sweep_config(payload: dict[str, Any] | None) -> ParameterSweepConfig | None:
+    if not payload:
+        return None
+    raw = dict(payload)
+    parameters = {
+        str(param_id): (
+            param_cfg if isinstance(param_cfg, ParameterList)
+            else ParameterList(**dict(param_cfg or {}))
+        )
+        for param_id, param_cfg in dict(raw.get("parameters", {}) or {}).items()
+    }
+    return ParameterSweepConfig(
+        parameters=parameters,
+        mode=raw.get("mode"),
+        metadata=dict(raw.get("metadata", {}) or {}),
+    )
+
+
+def _restore_profile_map(payload: dict[str, Any] | None) -> dict[str, ProfileConfig]:
+    if not payload:
+        return {}
+    raw = dict(payload)
+    return {
+        str(profile_id): (
+            profile_cfg if isinstance(profile_cfg, ProfileConfig)
+            else ProfileConfig(**dict(profile_cfg or {}))
+        )
+        for profile_id, profile_cfg in raw.items()
+    }
 
 
 def _restore_model_spec(payload: dict[str, Any] | None) -> ModelSpec | None:
@@ -254,7 +287,7 @@ def _restore_analysis_output(payload: dict[str, Any] | None) -> Any:
 
 def save_model(model: Any, path: str | Path | None = None) -> Path:
     """Persist the current model state to a directory following hierarchical structure."""
-    out = Path(path or model.out_dir or model.task.output.out_dir)
+    out = Path(path or model.out_dir or model.config.output.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     try:
         clear_managed_save_paths(out)
@@ -266,42 +299,57 @@ def save_model(model: Any, path: str | Path | None = None) -> Path:
     # 1. Config Layer
     config_dir = out / 'config'
     config_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Task
-    task_payload = {
-        'schema_version': '1.0',
-        'target': list(model.task.target) if isinstance(model.task.target, list) else model.task.target,
-        'input': {
-            'qasm_text': model.task.input.qasm_text,
-            'device_config': 'device.json',
-            'pulse_config': 'pulse.json',
-            'param_bindings': dict(model.task.input.param_bindings or {}) or None,
-        },
-        'output': public_value(model.task.output),
-        'features': compact_payload(
-            public_value(model.task.features),
-            public_value(WorkflowFeatureFlags()),
-        ),
-        'tags': list(model.task.tags or []),
-    }
-    write_json(config_dir / 'task.json', task_payload)
-    
-    # Device & Pulse
-    write_json(config_dir / 'device.json', {
-        'schema_version': '1.0',
-        'device': public_value(model.device.device) or {},
-        'noise': public_value(model.device.noise) or {},
-    })
-    write_json(config_dir / 'pulse.json', {
-        'schema_version': '1.0', 
-        'pulse': public_value(model.pulse) or {}
-    })
 
-    # Solvers & Analysers
+    circuits_dir = config_dir / 'circuits'
+    devices_dir = config_dir / 'devices'
+    pulses_dir = config_dir / 'pulses'
     solvers_dir = config_dir / 'solvers'
     analysers_dir = config_dir / 'analysers'
-    solvers_dir.mkdir(parents=True, exist_ok=True)
-    analysers_dir.mkdir(parents=True, exist_ok=True)
+    for directory in (circuits_dir, devices_dir, pulses_dir, solvers_dir, analysers_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    circuit_manifest: dict[str, str] = {}
+    for circuit_id, circuit_cfg in model.config.circuits.items():
+        rel = f'config/circuits/{circuit_id}.json'
+        write_json(config_dir / f'circuits/{circuit_id}.json', {
+            'schema_version': '1.0',
+            'qasm_text': circuit_cfg.qasm_text,
+            'param_bindings': dict(circuit_cfg.param_bindings or {}) or None,
+        })
+        circuit_manifest[circuit_id] = rel
+
+    device_manifest: dict[str, str] = {}
+    for device_id, device_cfg in model.config.devices.items():
+        rel = f'config/devices/{device_id}.json'
+        write_json(config_dir / f'devices/{device_id}.json', {
+            'schema_version': '1.0',
+            'device': public_value(device_cfg.device) or {},
+            'noise': public_value(device_cfg.noise) or {},
+        })
+        device_manifest[device_id] = rel
+
+    pulse_manifest: dict[str, str] = {}
+    for pulse_id, pulse_cfg in model.config.pulses.items():
+        rel = f'config/pulses/{pulse_id}.json'
+        write_json(config_dir / f'pulses/{pulse_id}.json', {
+            'schema_version': '1.0',
+            'pulse': public_value(pulse_cfg) or {},
+        })
+        pulse_manifest[pulse_id] = rel
+
+    config_meta_payload = {
+        'schema_version': '1.0',
+        'target': list(model.config.target) if isinstance(model.config.target, list) else model.config.target,
+        'output': public_value(model.config.output),
+        'features': compact_payload(
+            public_value(model.config.features),
+            public_value(WorkflowFeatureFlags()),
+        ),
+        'tags': list(model.config.tags or []),
+        'profiles': public_value(model.config.profiles),
+        'parameter_list': public_value(model.config.parameter_list) if model.config.parameter_list is not None else None,
+    }
+    write_json(config_dir / 'config.json', config_meta_payload)
 
     solver_manifest: dict[str, str] = {}
     for sid, scfg in model.solvers.items():
@@ -377,11 +425,12 @@ def save_model(model: Any, path: str | Path | None = None) -> Path:
 
     # 4. Manifest
     write_json(out / 'model_manifest.json', {
-        'schema_version': '3.0',
+        'schema_version': '3.1',
         'config': {
-            'task': 'config/task.json',
-            'device': 'config/device.json',
-            'pulse': 'config/pulse.json',
+            'circuits': circuit_manifest,
+            'config_meta': 'config/config.json',
+            'devices': device_manifest,
+            'pulses': pulse_manifest,
             'solvers': solver_manifest,
             'analysers': analyser_manifest,
         },
@@ -400,13 +449,32 @@ def load_model(model_class: Any, create_model_func: Any, path: str | Path) -> An
     
     # 1. Reconstruct Model using create_model_func (loads config layer)
     # Use .resolve() to ensure absolute paths, avoiding issues with relative path resolution
-    model = create_model_func(
-        task_config=(root / cfg_manifest.get('task', 'config/task.json')).resolve(),
-        solver_config={sid: (root / rel).resolve() for sid, rel in dict(cfg_manifest.get('solvers', {}) or {}).items()},
-        device_config=(root / cfg_manifest.get('device', 'config/device.json')).resolve(),
-        pulse_config=(root / cfg_manifest.get('pulse', 'config/pulse.json')).resolve(),
-        analyser_config={aid: (root / rel).resolve() for aid, rel in dict(cfg_manifest.get('analysers', {}) or {}).items()},
-    )
+    config_meta_path = root / cfg_manifest.get('config_meta', 'config/config.json')
+    create_kwargs = {
+        'solver_config': {sid: (root / rel).resolve() for sid, rel in dict(cfg_manifest.get('solvers', {}) or {}).items()},
+        'device_config': {
+            did: (root / rel).resolve()
+            for did, rel in dict(cfg_manifest.get('devices', {}) or {'default': 'config/device.json'}).items()
+        },
+        'pulse_config': {
+            pid: (root / rel).resolve()
+            for pid, rel in dict(cfg_manifest.get('pulses', {}) or {'default': 'config/pulse.json'}).items()
+        },
+        'analyser_config': {aid: (root / rel).resolve() for aid, rel in dict(cfg_manifest.get('analysers', {}) or {}).items()},
+        'circuit_config': {
+            cid: (root / rel).resolve()
+            for cid, rel in dict(cfg_manifest.get('circuits', {}) or {'default': 'config/circuit.json'}).items()
+        },
+    }
+    model = create_model_func(**create_kwargs)
+    if config_meta_path.exists():
+        meta_payload = read_json(config_meta_path)
+        model.config.target = meta_payload.get('target', model.config.target)
+        model.config.output = WorkflowOutputOptions(**dict(meta_payload.get('output', {}) or {}))
+        model.config.features = WorkflowFeatureFlags(**dict(meta_payload.get('features', {}) or {}))
+        model.config.tags = list(meta_payload.get('tags', model.config.tags) or [])
+        model.config.profiles = _restore_profile_map(dict(meta_payload.get('profiles', {}) or {}))
+        model.config.parameter_list = _restore_parameter_sweep_config(dict(meta_payload.get('parameter_list', {}) or {}))
     
     # 2. Restore State
     state_manifest = manifest.get('state', {})

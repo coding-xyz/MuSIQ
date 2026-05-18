@@ -1,0 +1,19 @@
+schema_version: "3.0"
+target: trajectory
+input:
+  qasm_text: |
+    OPENQASM 3;
+    // Classical cavity readout studies synthesize the readout pulse from pulse.yaml.
+  solver_config: solver.yaml
+  device_config: device.yaml
+  pulse_config: pulse.yaml
+  analyser_config: analyser.yaml
+output:
+  out_dir: ./runs
+  persist_artifacts: true
+  artifact_mode: targeted
+  export_plots: false
+  export_dxf: false
+features: {}
+tags: [task2, classical-readout, cavity, iq-analysis]
+

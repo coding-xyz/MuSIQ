@@ -1,0 +1,6 @@
+schema_version: "1.0"
+pulse:
+  gate_duration_ns: 16.0
+  xy_freq_Hz: 5000000000.0
+  single_qubit_shape: rect
+  single_qubit_rect_edge_ns: 2.0

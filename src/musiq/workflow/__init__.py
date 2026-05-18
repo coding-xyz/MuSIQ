@@ -2,9 +2,10 @@
 
 from musiq.workflow.contracts import (
     AnalyserConfig,
-    SolverBackendConfig,
-    TaskInputConfig,
+    CircuitConfig,
     DeviceConfig,
+    ProfileConfig,
+    SolverBackendConfig,
     WorkflowFeatureFlags,
     WorkflowFrameOptions,
     WorkflowInput,
@@ -12,7 +13,6 @@ from musiq.workflow.contracts import (
     WorkflowRunOptions,
     SolverConfig,
     Task,
-    TaskConfig,
     compose_workflow_task,
     normalize_device_payload,
 )
@@ -22,19 +22,25 @@ from musiq.workflow.model_execution import run_solver, run_analysis
 from musiq.workflow.planner import ExecutionPlan, build_execution_plan
 from musiq.workflow.session_adapter import commit_result_to_session
 from musiq.workflow.task_io import (
-    load_config_bundle_files,
     load_analyser_config_file,
+    load_circuit_config_file,
     load_device_config_file,
     load_pulse_config_file,
     load_solver_config_file,
-    load_task_config_file,
-    load_task_file,
+    load_config,
+    circuit_from_payload,
+    solver_from_payload,
+    device_from_payload,
+    pulse_from_payload,
+    analyser_from_payload,
+    profile_from_payload,
 )
 
 __all__ = [
     "SolverBackendConfig",
     "AnalyserConfig",
-    "TaskInputConfig",
+    "CircuitConfig",
+    "ProfileConfig",
     "WorkflowFeatureFlags",
     "WorkflowFrameOptions",
     "DeviceConfig",
@@ -43,7 +49,6 @@ __all__ = [
     "WorkflowRunOptions",
     "SolverConfig",
     "Task",
-    "TaskConfig",
     "compose_workflow_task",
     "normalize_device_payload",
     "ModelAnalysis",
@@ -55,13 +60,18 @@ __all__ = [
     "ExecutionPlan",
     "build_execution_plan",
     "commit_result_to_session",
-    "load_config_bundle_files",
     "load_analyser_config_file",
+    "load_circuit_config_file",
     "load_device_config_file",
     "load_pulse_config_file",
     "load_solver_config_file",
-    "load_task_config_file",
-    "load_task_file",
+    "load_config",
+    "circuit_from_payload",
+    "solver_from_payload",
+    "device_from_payload",
+    "pulse_from_payload",
+    "analyser_from_payload",
+    "profile_from_payload",
 ]
 
 # Deprecated compatibility alias. Prefer ``ModelAnalysis`` in new code.

@@ -1,0 +1,52 @@
+schema_version: "1.0"
+backend:
+  level: qubit
+  analysis_pipeline: structured
+  truncation: {}
+run:
+  engine: qutip
+  solver_mode: heom
+  dt_s: 0.5e-9
+  t_padding_s: 0.0
+  seed: 12345
+  qutip_options:
+    store_states: true
+    progress_bar: false
+    nsteps: 20000
+    max_step: 2.5e-9
+  backend_options:
+    heom:
+      max_depth: 2
+      max_ados: 5000
+      dephasing_coupling: sigma_z_over_2
+      bath_expansion:
+        one_over_f:
+          method: multi_lorentzian
+          nterms: 8
+          grid: log
+frame:
+  mode: rotating
+  reference: carrier
+  rwa: true
+study:
+  - name: heom_1overf_spin_echo
+    description: HEOM approximation of 1/f dephasing for Ramsey and spin-echo sequences
+    active_components: [q0]
+    active_connections: []
+    prep_state:
+      label: ground
+      sequence: []
+    representations:
+      q0: quantum
+    bases:
+      q0:
+        kind: qubit
+        levels: 2
+    solver_mode: heom
+    time:
+      dt_s: 0.5e-9
+      t_padding_s: 0.0
+    frame:
+      mode: rotating
+      reference: carrier
+      rwa: true

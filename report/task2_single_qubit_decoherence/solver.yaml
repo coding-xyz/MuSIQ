@@ -1,0 +1,28 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  study:
+    - name: single_qubit_decoherence
+      description: compare one-qubit Lindblad decoherence channels after RX preparation
+      active_components: [q0]
+      active_connections: []
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
+      solver_mode: me
+      time:
+        dt_s: 2.0e-9
+        t_padding_s: 500.0e-9
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}
+  schedule:
+    policy: serial

@@ -8,12 +8,12 @@ from musiq.workflow import create_model
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build parser for 5-config model creation and execution."""
+    """Build parser for resource-first model creation and execution."""
     parser = argparse.ArgumentParser(description="musiq model runner")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    run_model_cmd = sub.add_parser("run-model", help="create a model from task/solver/device/pulse/analyser configs and run it")
-    run_model_cmd.add_argument("--task-config", required=True, help="path to task config (json/yaml)")
+    run_model_cmd = sub.add_parser("run-model", help="create a model from circuit/device/pulse/solver/analyser configs and run it")
+    run_model_cmd.add_argument("--circuit-config", required=True, help="path to circuit config (json/yaml)")
     run_model_cmd.add_argument("--solver-config", default="", help="optional solver config override (json/yaml)")
     run_model_cmd.add_argument("--device-config", default="", help="optional device config override (json/yaml)")
     run_model_cmd.add_argument("--pulse-config", default="", help="optional pulse config override (json/yaml)")
@@ -26,7 +26,7 @@ def main() -> None:
 
     Example:
         ```bash
-        musiq run-model --task-config tasks/demo.yaml --solver-config solvers/qutip.yaml --device-config device/default.yaml --pulse-config pulses/default.yaml --analyser-config analysers/default.yaml
+        musiq run-model --circuit-config circuits/demo.yaml --solver-config solvers/qutip.yaml --device-config device/default.yaml --pulse-config pulses/default.yaml --analyser-config analysers/default.yaml
         ```
     """
     parser = build_parser()
@@ -36,7 +36,7 @@ def main() -> None:
         parser.error("Only `run-model` mode is supported.")
 
     model = create_model(
-        task_config=args.task_config,
+        circuit_config=args.circuit_config,
         solver_config=(args.solver_config or None),
         device_config=(args.device_config or None),
         pulse_config=(args.pulse_config or None),

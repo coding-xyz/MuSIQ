@@ -1,0 +1,9 @@
+schema_version: "1.0"
+qasm_text: |
+  OPENQASM 3;
+  include "stdgates.inc";
+  qubit[1] q;
+  bit[1] c;
+  measure q[0] -> c[0];
+  reset q[0];
+  measure q[0] -> c[0];

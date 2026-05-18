@@ -1,0 +1,52 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  seed: 12345
+  mcwf_ntraj: 32
+  study:
+    - name: prep_0_reset
+      description: Classical cavity readout and measurement-based reset starting from hidden state 0.
+      active_components: [r0, ro0]
+      active_connections: [readout_r0_ro0]
+      representations:
+        r0: classical
+        ro0: classical
+      solver_mode: me
+      time:
+        dt_s: 5.0e-10
+        t_end_s: 1.2e-6
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options:
+        subsystem_model: cavity_classical_readout
+        readout_protocol: heterodyne
+      prep_state:
+        label: "0"
+        sequence: []
+    - name: prep_1_reset
+      description: Classical cavity readout and measurement-based reset starting from hidden state 1.
+      active_components: [r0, ro0]
+      active_connections: [readout_r0_ro0]
+      representations:
+        r0: classical
+        ro0: classical
+      solver_mode: me
+      time:
+        dt_s: 5.0e-10
+        t_end_s: 1.2e-6
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options:
+        subsystem_model: cavity_classical_readout
+        readout_protocol: heterodyne
+      prep_state:
+        label: "1"
+        sequence: []
+  schedule:
+    policy: serial

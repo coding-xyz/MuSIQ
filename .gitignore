@@ -1,7 +1,5 @@
 runs/
-examples/
 personal_use/
-report/
 agent_config/
 */__pycache__/
 *__pycache__*

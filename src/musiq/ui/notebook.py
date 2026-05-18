@@ -95,9 +95,13 @@ def _first_available_analysis(model: Model, *, study_name: str | None = None):
     return None
 
 
-def run_task_case(
-    task_config: str | Path,
+def run_circuit_case(
+    circuit_config: str | Path,
+    solver_config: str | Path,
+    device_config: str | Path,
     *,
+    pulse_config: str | Path | None = None,
+    analyser_config: str | Path | None = None,
     label: str | None = None,
     suffix: str | None = None,
     param_bindings: dict[str, float] | None = None,
@@ -107,65 +111,52 @@ def run_task_case(
     out_dir: str | Path | None = None,
     study_name: str | None = None,
 ) -> dict[str, Any]:
-    """Run one musiq task config with optional parameter and pulse overrides.
-
-    The original task/pulse files are not modified. If overrides are provided,
-    generated YAML files are written under ``generated_dir`` and the generated
-    task is passed to ``musiq.workflow.create_model``.
-    """
-    source_task = Path(task_config).resolve()
+    """Run one musiq circuit/device/solver bundle with optional overrides."""
+    source_circuit = Path(circuit_config).resolve()
+    source_solver = Path(solver_config).resolve()
+    source_device = Path(device_config).resolve()
+    source_pulse = Path(pulse_config).resolve() if pulse_config is not None else None
+    source_analyser = Path(analyser_config).resolve() if analyser_config is not None else None
     token = str(suffix or int(time.time() * 1000))
-    generated_root = Path(generated_dir or source_task.parent / "generated_configs").resolve()
-    task_payload = copy.deepcopy(_load_yaml(source_task))
-    task_input = task_payload.setdefault("input", {})
+    generated_root = Path(generated_dir or source_circuit.parent / "generated_configs").resolve()
+    generated_circuit = source_circuit
+    generated_solver = source_solver
+    generated_pulse = source_pulse
 
-    def resolve_ref(key: str) -> Path | None:
-        raw = task_input.get(key)
-        if not raw:
-            return None
-        path = Path(str(raw))
-        return path if path.is_absolute() else (source_task.parent / path).resolve()
-
-    for key in ("device_config", "solver_config", "analyser_config"):
-        resolved = resolve_ref(key)
-        if resolved is not None:
-            task_input[key] = str(resolved)
-
-    solver_path = resolve_ref("solver_config")
-    if seed_offset is not None and solver_path is not None:
-        solver_payload = copy.deepcopy(_load_yaml(solver_path))
+    if seed_offset is not None:
+        solver_payload = copy.deepcopy(_load_yaml(source_solver))
         solver_cfg = solver_payload.setdefault("solver", {})
         if "seed" in solver_cfg:
             solver_cfg["seed"] = int(solver_cfg["seed"]) + int(seed_offset)
             generated_solver = _write_yaml(generated_root / f"solver_{token}.yaml", solver_payload)
-            task_input["solver_config"] = str(generated_solver)
 
     if param_bindings is not None:
-        task_input["param_bindings"] = {str(k): float(v) for k, v in param_bindings.items()}
-
-    pulse_path = resolve_ref("pulse_config")
+        circuit_payload = copy.deepcopy(_load_yaml(source_circuit))
+        circuit_payload["param_bindings"] = {str(k): float(v) for k, v in param_bindings.items()}
+        generated_circuit = _write_yaml(generated_root / f"circuit_{token}.yaml", circuit_payload)
 
     if pulse_updates:
-        if pulse_path is None:
-            raise ValueError(f"task config has no input.pulse_config: {source_task}")
-        pulse_payload = copy.deepcopy(_load_yaml(pulse_path))
+        if source_pulse is None:
+            raise ValueError(f"circuit bundle has no pulse_config: {source_circuit}")
+        pulse_payload = copy.deepcopy(_load_yaml(source_pulse))
         pulse_payload.setdefault("pulse", {}).update(dict(pulse_updates))
         generated_pulse = _write_yaml(generated_root / f"pulse_{token}.yaml", pulse_payload)
-        task_input["pulse_config"] = str(generated_pulse)
-    elif pulse_path is not None:
-        task_input["pulse_config"] = str(pulse_path)
 
+    model = create_model(
+        circuit_config=generated_circuit,
+        solver_config=generated_solver,
+        device_config=source_device,
+        pulse_config=generated_pulse,
+        analyser_config=source_analyser,
+    )
     if out_dir is not None:
-        task_payload.setdefault("output", {})["out_dir"] = str(Path(out_dir).resolve())
-
-    generated_task = _write_yaml(generated_root / f"task_{token}.yaml", task_payload)
-    model = create_model(task_config=generated_task)
+        model.config.output.out_dir = str(Path(out_dir).resolve())
     model.run()
     saved_dir = model.save()
     trajectory = _first_available_trajectory(model, study_name=study_name)
     return {
         "label": label or token,
-        "task_config": generated_task,
+        "circuit_config": generated_circuit,
         "out_dir": saved_dir,
         "model": model,
         "trajectory": trajectory,
@@ -174,24 +165,32 @@ def run_task_case(
 
 
 def run_param_sweep(
-    task_config: str | Path,
+    circuit_config: str | Path,
+    solver_config: str | Path,
+    device_config: str | Path,
     param_name: str,
     values,
     *,
+    pulse_config: str | Path | None = None,
+    analyser_config: str | Path | None = None,
     labels: list[str] | None = None,
     seed_stride: int | None = 1,
     generated_dir: str | Path | None = None,
     out_root: str | Path | None = None,
     study_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Run a musiq task repeatedly while sweeping one QASM parameter."""
+    """Run a musiq circuit bundle repeatedly while sweeping one QASM parameter."""
     cases = []
     for idx, value in enumerate(list(values)):
         token = f"{param_name}_{idx:02d}"
         label = labels[idx] if labels and idx < len(labels) else f"{param_name}={float(value):.3g}"
         cases.append(
-            run_task_case(
-                task_config,
+            run_circuit_case(
+                circuit_config,
+                solver_config,
+                device_config,
+                pulse_config=pulse_config,
+                analyser_config=analyser_config,
                 label=label,
                 suffix=token,
                 param_bindings={param_name: float(value)},
@@ -205,24 +204,32 @@ def run_param_sweep(
 
 
 def run_pulse_sweep(
-    task_config: str | Path,
+    circuit_config: str | Path,
+    solver_config: str | Path,
+    device_config: str | Path,
     pulse_key: str,
     values,
     *,
+    pulse_config: str | Path,
+    analyser_config: str | Path | None = None,
     labels: list[str] | None = None,
     seed_stride: int | None = 1,
     generated_dir: str | Path | None = None,
     out_root: str | Path | None = None,
     study_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Run a musiq task repeatedly while sweeping one pulse config field."""
+    """Run a musiq circuit bundle repeatedly while sweeping one pulse config field."""
     cases = []
     for idx, value in enumerate(list(values)):
         token = f"{pulse_key}_{idx:02d}"
         label = labels[idx] if labels and idx < len(labels) else f"{pulse_key}={float(value):.3g}"
         cases.append(
-            run_task_case(
-                task_config,
+            run_circuit_case(
+                circuit_config,
+                solver_config,
+                device_config,
+                pulse_config=pulse_config,
+                analyser_config=analyser_config,
                 label=label,
                 suffix=token,
                 pulse_updates={pulse_key: float(value)},
@@ -383,7 +390,7 @@ def plot_iq_clouds(ax, cases: list[dict[str, Any]], title: str | None = None) ->
 
 __all__ = [
     "plot_default",
-    "run_task_case",
+    "run_circuit_case",
     "run_param_sweep",
     "run_pulse_sweep",
     "density_snapshots",
