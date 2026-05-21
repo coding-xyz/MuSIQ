@@ -56,10 +56,12 @@ def test_summarize_workflow_result_flattens_model_run_and_analysis(tmp_path: Pat
     )
 
     run_bundle = SimpleNamespace(
-        result=SimpleNamespace(
-            trajectory=trajectory,
-            runtime_metadata={"solver_mode": "me", "details": {"solver_impl": "mesolve", "native_solver": True}},
-        ),
+        results={
+            "param_0": SimpleNamespace(
+                trajectories={"shot_0": trajectory},
+                runtime_metadata={"solver_mode": "me", "details": {"solver_impl": "mesolve", "native_solver": True}},
+            )
+        },
         artifacts=RunArtifacts(
             model_spec=ModelSpec(
                 solver=SolverSpec(engine="qutip", mode="me"),
@@ -70,12 +72,12 @@ def test_summarize_workflow_result_flattens_model_run_and_analysis(tmp_path: Pat
         ),
     )
     model = SimpleNamespace(
-        runs={"solver_0": run_bundle},
+        runs={"solver_0": {"run_0": run_bundle}},
         analyses={
             "analyser_0": SimpleNamespace(
                 analysis_id="analyser_0",
                 analyser_id="analyser_0",
-                input_results=[ResultRef(run_id="solver_0", parameter_id="param_0")],
+                input_results=[ResultRef(run_id="run_0", parameter_id="param_0")],
                 output=CaseAnalysis(
                     metrics={
                         "population": MetricSeries(values={"0": [0.9, 0.2], "1": [0.1, 0.8]}),
@@ -135,7 +137,7 @@ def test_attach_compare_status_marks_mixed_encodings_for_review():
 def test_model_get_analysis_resolves_generated_case_id_by_analyser_and_study():
     model = Model(config=ModelConfig(circuits={}, devices={}, pulses={}, solvers={}, analysers={}))
     model.config.analysers["analyser_0"] = SimpleNamespace(solver_id="solver_0")
-    model.runs["run_0"] = SimpleNamespace(identity=SimpleNamespace(study_name="ground"))
+    model.runs["solver_0"] = {"run_0": SimpleNamespace(identity=SimpleNamespace(study_name="ground"))}
     model.analyses["case_0"] = SimpleNamespace(
         analysis_id="case_0",
         analyser_id="analyser_0",

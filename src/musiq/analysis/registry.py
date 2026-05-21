@@ -2,62 +2,98 @@
 
 from __future__ import annotations
 
+from enum import Enum, auto
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
-from musiq.analysis.passes import default_analysis_pass
 from musiq.common.schemas import ModelSpec, Trajectory
 
+class AnalysisLevel(Enum):
+    CASE = auto()
+    COMPREHENSIVE = auto()
+
+class AnalysisKind(Enum):
+    # CASE level kinds
+    SINGLE_QUBIT = auto()
+    READOUT = auto()
+    # COMPREHENSIVE level kinds
+    IQ = auto()
+
+class AnalysisHandler(Protocol):
+    """Protocol for a handler that can execute a specific kind of analysis."""
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        ...
 
 def _build_rev(name: str, *, kind: str) -> str:
     stamp = datetime.now(timezone.utc).isoformat()
     return hashlib.sha256(f"{kind}:{name}:{stamp}".encode("utf-8")).hexdigest()[:12]
 
-
 @dataclass
-class _Entry:
-    name: str
-    callable_obj: callable
-    schema_in: str
-    schema_out: str
-    analysis_rev: str
-
-
-@dataclass
-class _MetricEntry:
-    name: str
-    callable_obj: Callable[[Trajectory, ModelSpec, dict[str, Any] | None, dict[str, Any] | None], dict[str, Any]]
-    schema_out: str
-    metric_rev: str
-
+class KindEntry:
+    level: AnalysisLevel
+    kind: AnalysisKind
+    handler: AnalysisHandler
+    revision: str
 
 class AnalysisRegistry:
-    """Registry for named analysis passes with revision IDs."""
+    """Registry for hierarchical analysis kinds."""
 
     def __init__(self):
-        self._entries: dict[str, _Entry] = {}
-        self.register("default", default_analysis_pass, "Trajectory@1.0", "Report@1.0")
+        self._kinds: dict[tuple[AnalysisLevel, AnalysisKind], KindEntry] = {}
 
-    def register(self, name: str, callable_obj: callable, schema_in: str, schema_out: str) -> str:
-        """Register a named pass and return its generated revision ID."""
-        analysis_rev = _build_rev(name, kind="analysis")
-        self._entries[name] = _Entry(
-            name=name,
-            callable_obj=callable_obj,
-            schema_in=schema_in,
-            schema_out=schema_out,
-            analysis_rev=analysis_rev,
+    def register_kind(
+        self, 
+        level: AnalysisLevel, 
+        kind: AnalysisKind, 
+        handler: AnalysisHandler
+    ) -> str:
+        """Register an analysis kind and return its revision ID."""
+        rev = _build_rev(kind.name, kind="analysis_kind")
+        self._kinds[(level, kind)] = KindEntry(
+            level=level,
+            kind=kind,
+            handler=handler,
+            revision=rev,
         )
-        return analysis_rev
+        return rev
 
-    def get(self, name: str) -> _Entry:
-        """Fetch a registry entry by pass name."""
-        if name not in self._entries:
-            raise KeyError(f"Unknown analysis pass: {name}")
-        return self._entries[name]
+    def get_handler(self, level: AnalysisLevel, kind: AnalysisKind) -> AnalysisHandler:
+        """Fetch the handler for a specific level and kind."""
+        if (level, kind) not in self._kinds:
+            raise KeyError(f"No handler registered for {level.name}.{kind.name}")
+        return self._kinds[(level, kind)].handler
 
+    def get_revision(self, level: AnalysisLevel, kind: AnalysisKind) -> str:
+        """Fetch the revision ID for a specific kind."""
+        if (level, kind) not in self._kinds:
+            raise KeyError(f"No handler registered for {level.name}.{kind.name}")
+        return self._kinds[(level, kind)].revision
+
+
+class AnalysisRunner:
+    """Compatibility wrapper around the hierarchical registry.
+
+    Older callers expect a runner object with a ``run`` method. Keep a minimal
+    implementation here so imports and simple call sites continue to work while
+    analysis dispatch migrates to ``dispatcher.dispatch_analysis``.
+    """
+
+    def __init__(self, registry: AnalysisRegistry):
+        self.registry = registry
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        level = kwargs.pop("level", None)
+        kind = kwargs.pop("kind", None)
+        if level is None or kind is None:
+            raise ValueError("AnalysisRunner.run requires `level` and `kind`.")
+        if isinstance(level, str):
+            level = AnalysisLevel[level.upper()]
+        if isinstance(kind, str):
+            kind = AnalysisKind[kind.upper()]
+        handler = self.registry.get_handler(level, kind)
+        return handler(*args, **kwargs)
 
 class MetricRegistry:
     """Registry for named analyser metrics."""
@@ -95,21 +131,18 @@ class MetricRegistry:
     def names(self) -> list[str]:
         return sorted(self._entries.keys())
 
+@dataclass
+class _MetricEntry:
+    name: str
+    callable_obj: Callable[[Trajectory, ModelSpec, dict[str, Any] | None, dict[str, Any] | None], dict[str, Any]]
+    schema_out: str
+    metric_rev: str
 
-class AnalysisRunner:
-    """Execute analysis passes selected by pipeline name."""
-
-    def __init__(self, registry: AnalysisRegistry):
-        self.registry = registry
-
-    def run(self, Trajectory: Trajectory, model_spec: ModelSpec, pipeline: str = "default") -> dict:
-        """Run an analysis pass and attach pass metadata."""
-        if pipeline.startswith("custom:"):
-            name = pipeline.split(":", 1)[1]
-        else:
-            name = pipeline
-        entry = self.registry.get(name)
-        out = entry.callable_obj(Trajectory, model_spec)
-        out["analysis_rev"] = entry.analysis_rev
-        out["analysis_name"] = name
-        return out
+__all__ = [
+    "AnalysisLevel",
+    "AnalysisKind",
+    "AnalysisRegistry",
+    "MetricRegistry",
+    "AnalysisHandler",
+    "AnalysisRunner",
+]

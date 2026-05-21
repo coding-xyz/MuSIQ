@@ -211,5 +211,3 @@ def model_spec_from_runtime_dict(
     # for this shim to avoid forcing a complex SystemSpec construction.
     spec.metadata["dimension"] = dimension
     return spec
-
-

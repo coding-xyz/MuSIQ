@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from musiq.analysis.error_budget import build_report
-from musiq.analysis.observables import compute_observables
+from musiq.analysis.common.observables import compute_observables
 from musiq.common.schemas import ModelSpec, Trajectory
 
 

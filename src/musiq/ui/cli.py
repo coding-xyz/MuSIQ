@@ -36,11 +36,11 @@ def main() -> None:
         parser.error("Only `run-model` mode is supported.")
 
     model = create_model(
-        circuit_config=args.circuit_config,
-        solver_config=(args.solver_config or None),
-        device_config=(args.device_config or None),
-        pulse_config=(args.pulse_config or None),
-        analyser_config=(args.analyser_config or None),
+        circuits=args.circuit_config,
+        solvers=(args.solver_config or None),
+        devices=(args.device_config or None),
+        pulses=(args.pulse_config or None),
+        analysers=(args.analyser_config or None),
     )
     model.run()
     out = model.save()

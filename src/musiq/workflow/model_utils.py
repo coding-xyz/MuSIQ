@@ -170,6 +170,9 @@ def bind_loaded_analyser(
     if len(solver_ids) == 1:
         bound_cfg.solver_id = solver_ids[0]
         return bound_cfg
+    if analyser_id in solver_ids:
+        bound_cfg.solver_id = analyser_id
+        return bound_cfg
     raise ValueError(
         f'Analyser `{analyser_id}` must declare solver_id when the model has multiple solvers.'
     )
@@ -235,10 +238,8 @@ def compact_payload(current: dict[str, Any], default: dict[str, Any]) -> dict[st
     }
 
 def format_study_id(base_id: str, study: dict[str, Any], study_index: int | None, total_studies: int) -> str:
-    """Standardize ID generation for studies."""
-    if total_studies <= 1:
-        return base_id
+    """Standardize ID generation for studies. Returns the study name/token."""
     name = study_name(study, study_index)
     if not name:
-        return base_id
-    return f'{base_id}__{safe_study_token(name)}'
+        return "default"
+    return safe_study_token(name)

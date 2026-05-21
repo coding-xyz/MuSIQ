@@ -14,6 +14,12 @@ from musiq.pulse.visualize import plot_pulses, plot_report, plot_trajectory
 from musiq.workflow.model import Model, create_model
 
 
+def _iter_model_runs(model: Model):
+    for solver_runs in model.runs.values():
+        for run_id, run_obj in solver_runs.items():
+            yield run_id, run_obj
+
+
 def plot_default(model: Model) -> dict[str, object]:
     """Build the default figure bundle for a completed ``Model``.
 
@@ -26,9 +32,9 @@ def plot_default(model: Model) -> dict[str, object]:
     """
     if not model.runs:
         raise ValueError("plot_default expects a model that has already been run.")
-    run_id = sorted(model.runs.keys())[0]
-    bundle = model.runs[run_id]
-    trajectory = bundle.result.trajectory if bundle.result else None
+    run_id, bundle = next(_iter_model_runs(model))
+    result = next(iter(bundle.results.values()), None)
+    trajectory = next(iter(result.trajectories.values()), None) if result is not None else None
     assert trajectory is not None
 
     report_payload = {}
@@ -69,8 +75,9 @@ def _first_available_trajectory(model: Model, *, study_name: str | None = None):
             trajectory = None
         if trajectory is not None:
             return trajectory
-    for bundle in model.runs.values():
-        trajectory = bundle.result.trajectory if bundle.result else None
+    for _, bundle in _iter_model_runs(model):
+        result = next(iter(bundle.results.values()), None)
+        trajectory = next(iter(result.trajectories.values()), None) if result is not None else None
         if trajectory is not None:
             return trajectory
     keys = list(model.runs.keys())
@@ -88,7 +95,7 @@ def _first_available_analysis(model: Model, *, study_name: str | None = None):
             analysis = None
         if analysis is not None:
             return analysis
-    for run_id, bundle in model.runs.items():
+    for run_id, _ in _iter_model_runs(model):
         analysis = model.find_analysis_for_run(run_id)
         if analysis:
             return analysis
@@ -143,11 +150,11 @@ def run_circuit_case(
         generated_pulse = _write_yaml(generated_root / f"pulse_{token}.yaml", pulse_payload)
 
     model = create_model(
-        circuit_config=generated_circuit,
-        solver_config=generated_solver,
-        device_config=source_device,
-        pulse_config=generated_pulse,
-        analyser_config=source_analyser,
+        circuits=generated_circuit,
+        solvers=generated_solver,
+        devices=source_device,
+        pulses=generated_pulse,
+        analysers=source_analyser,
     )
     if out_dir is not None:
         model.config.output.out_dir = str(Path(out_dir).resolve())
@@ -250,7 +257,8 @@ def density_snapshots(source: Any) -> np.ndarray:
 
 
 def _case_model_spec(case: dict[str, Any]):
-    return next(iter(case["model"].runs.values())).artifacts.model_spec
+    _, run_obj = next(_iter_model_runs(case["model"]))
+    return run_obj.artifacts.model_spec
 
 
 def qubit_level_populations(case: dict[str, Any], *, normalize: bool = True) -> np.ndarray:

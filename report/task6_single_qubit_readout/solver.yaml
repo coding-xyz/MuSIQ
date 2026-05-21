@@ -1,0 +1,52 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  seed: 12345
+  mcwf_ntraj: 1000
+  study:
+    - name: prep_0
+      description: Classical cavity readout driven with noisy input while the hidden qubit state is fixed to 0.
+      active_components: [r0, ro0]
+      active_connections: [readout_r0_ro0]
+      representations:
+        r0: classical
+        ro0: classical
+      solver_mode: me
+      time:
+        dt_s: 5.0e-10
+        t_end_s: 420e-9
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options:
+        subsystem_model: cavity_classical_readout
+        readout_protocol: heterodyne
+      prep_state:
+        label: "0"
+        sequence: []
+    - name: prep_1
+      description: Classical cavity readout driven with noisy input while the hidden qubit state is fixed to 1.
+      active_components: [r0, ro0]
+      active_connections: [readout_r0_ro0]
+      representations:
+        r0: classical
+        ro0: classical
+      solver_mode: me
+      time:
+        dt_s: 5.0e-10
+        t_end_s: 420e-9
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options:
+        subsystem_model: cavity_classical_readout
+        readout_protocol: heterodyne
+      prep_state:
+        label: "1"
+        sequence: []
+  schedule:
+    policy: serial

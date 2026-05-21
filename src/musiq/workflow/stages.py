@@ -6,7 +6,7 @@ import time
 from copy import deepcopy
 
 from musiq.analysis.metrics import resolve_metrics_payload
-from musiq.analysis.readout_chain import build_readout_analysis
+from musiq.analysis.dispatcher import dispatch_analysis
 from musiq.schemas.results import CaseAnalysis
 from musiq.analysis.sensitivity import build_error_budget_v2, build_sensitivity_report
 from musiq.backend.compile_pipeline import CompilePipeline
@@ -398,16 +398,20 @@ def run_analysis_stage(
     model_spec,
     pulse_ir,
     pulse_cfg: dict | None,
+    device_cfg: dict | None,
     cfg,
     logical_error,
     analyser_cfg: dict | None,
     metric_registry=None,
 ):
-    """Run observables/report analysis and build sensitivity budgets."""
+    """Run Case-level analysis steps and build sensitivity budgets."""
     stage_timings: dict[str, float] = {}
     t0 = time.perf_counter()
     
-    # Metrics output is a flat metric-name -> MetricSeries mapping for CaseAnalysis
+    analyser_cfg = dict(analyser_cfg or {})
+    analysis_steps = analyser_cfg.get("analysis", [])
+    
+    # 1. Handle General Metrics (Legacy / Case-level)
     metrics_out, observables_obj, report_obj = _resolve_metric_payload(
         trajectory,
         model_spec,
@@ -415,21 +419,46 @@ def run_analysis_stage(
         metric_registry=metric_registry,
     )
     
-    # Readout output is now a dict containing typed ReadoutAnalysis and IQAnalysis
-    readout_results = build_readout_analysis(
-        trajectory=trajectory,
-        model_spec=model_spec,
-        pulse_ir=pulse_ir,
-        pulse_cfg=pulse_cfg,
-        analyser_cfg=analyser_cfg,
-        seed=int(getattr(cfg, "seed", 12345)),
-    )
-    
+    # 2. Handle Specific Analysis Steps (Level-Aware)
+    case_readout = None
+    case_metrics_override = None
+    for step in analysis_steps:
+        if step.get("level") != "CASE":
+            continue
+
+        # Map legacy names to AnalysisKind
+        name_to_kind = {
+            "readout_analysis": "READOUT",
+            "state_analysis": "SINGLE_QUBIT",
+        }
+        kind = name_to_kind.get(step.get("name"), step.get("kind"))
+        if not kind:
+            continue
+
+        try:
+            res = dispatch_analysis(
+                level="CASE",
+                kind=kind,
+                trajectory=trajectory,
+                model_spec=model_spec,
+                pulse_ir=pulse_ir,
+                pulse_cfg=pulse_cfg,
+                device_cfg=device_cfg,
+                seed=int(getattr(cfg, "seed", 12345)),
+            )
+            if kind == "READOUT":
+                case_readout = res
+            elif kind == "SINGLE_QUBIT":
+                case_metrics_override = res
+        except KeyError:
+            continue
+            
     # Aggregate into typed CaseAnalysis
+    # We leave 'iq' as None because it is now a Comprehensive-level result
     analysis_output = CaseAnalysis(
-        metrics=dict(metrics_out),
-        readout=readout_results.get("readout"),
-        iq=readout_results.get("iq"),
+        metrics=dict(case_metrics_override or metrics_out),
+        readout=case_readout, 
+        iq=None,
     )
     
     t1 = time.perf_counter()

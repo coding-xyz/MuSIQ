@@ -175,12 +175,14 @@ class ShotData:
     """Individual measurement shot data.
 
     Attributes:
-        timestamp: Time of the measurement shot.
-        value: Measured value.
+        timestamp: Start time of the measurement shot (Trigger time).
+        a_out: The complex output field of the cavity (rotating frame).
+        integrated_iq: The integrated IQ point for this shot [real, imag].
         metadata: Non-primary technical annotations.
     """
     timestamp: float = 0.0
-    value: Any = None
+    a_out: list[list[float]] | None = None
+    integrated_iq: list[float] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -189,13 +191,185 @@ class ReadoutAnalysis:
     """Structural analysis of readout signals.
 
     Attributes:
-        signals: Raw or pre-processed readout signals.
+        sim_times: Original simulation time grid.
+        adc_times: Shared sampling time grid for all readout shots.
+        chain_params: Physical parameters of the readout chain.
+        signals: Ideal quantum signals.
         demodulation: Demodulation parameters and results.
         shots: Individual measurement shot data.
     """
+    sim_times: list[float] = field(default_factory=list)
+    adc_times: list[float] = field(default_factory=list)
+    chain_params: dict[str, Any] = field(default_factory=dict)
     signals: dict[str, Any] = field(default_factory=dict)
     demodulation: dict[str, Any] = field(default_factory=dict)
     shots: list[ShotData] = field(default_factory=list)
+    integrated_points: list[complex] = field(default_factory=list)
+
+    @staticmethod
+    def _coerce_scalar(value: Any, default: float = 0.0) -> float:
+        import numpy as np
+
+        if value is None:
+            return float(default)
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.strip())
+            except ValueError:
+                return float(default)
+        if isinstance(value, (list, tuple)):
+            if not value:
+                return float(default)
+            return ReadoutAnalysis._coerce_scalar(value[0], default)
+        if isinstance(value, np.ndarray):
+            if value.size <= 0:
+                return float(default)
+            return ReadoutAnalysis._coerce_scalar(value.reshape(-1)[0].item(), default)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def reconstruct_shot(self, shot_index: int, target: str) -> Any:
+        """
+        Reconstruct a specific signal for a given shot by applying the physical 
+        readout chain transformations to the stored baseband field.
+
+        The transformation chain is:
+        a_out (Rotating Frame) -> RF Signal (Carrier) -> IF Signal (Down-converted) -> ADC/Current
+
+        Args:
+            shot_index: Index of the shot to reconstruct.
+            target: The target signal representation. 
+                    Options: "rf", "if", "adc", "heterodyne_current", "complex_envelope".
+
+        Returns:
+            The reconstructed signal as a list of floats or complex pairs.
+        """
+        import numpy as np
+        if shot_index >= len(self.shots):
+            raise IndexError(f"Shot index {shot_index} out of range.")
+        
+        shot = self.shots[shot_index]
+        if shot.a_out is None:
+            return None
+        
+        # Current simulation values (high res)
+        a_out_sim = np.asarray([complex(p[0], p[1]) for p in shot.a_out])
+        t_sim = np.asarray(self.sim_times)
+        t_adc = np.asarray(self.adc_times)
+        params = self.chain_params
+        
+        # Resample a_out from sim_times to adc_times to match dimensions
+        if t_sim.size > 0 and t_adc.size > 0:
+            re = np.interp(t_adc, t_sim, np.real(a_out_sim), left=0.0, right=0.0)
+            im = np.interp(t_adc, t_sim, np.imag(a_out_sim), left=0.0, right=0.0)
+            a_out = re.astype(complex) + 1j * im.astype(complex)
+        else:
+            a_out = np.zeros(t_adc.size, dtype=complex)
+
+        # 1. Baseband -> RF
+        fc = self._coerce_scalar(
+            params.get("carrier_frequency_Hz", params.get("carrier_freq", 0.0)),
+            0.0,
+        )
+        pc = self._coerce_scalar(
+            params.get("carrier_phase_rad", params.get("rf_phase_rad", 0.0)),
+            0.0,
+        )
+        rf = a_out * np.exp(1j * (2 * np.pi * fc * t_adc + pc))
+        
+        if target == "rf":
+            return [[float(v.real), float(v.imag)] for v in rf]
+        
+        # 2. RF -> IF
+        flo = self._coerce_scalar(params.get("lo_frequency_Hz", 0.0), 0.0)
+        plo = self._coerce_scalar(
+            params.get("lo_phase_rad", params.get("if_phase_rad", 0.0)),
+            0.0,
+        )
+        if_sig = rf * np.exp(-1j * (2 * np.pi * flo * t_adc + plo))
+        
+        if target == "if":
+            return [[float(v.real), float(v.imag)] for v in if_sig]
+        
+        if target == "heterodyne_current":
+            return [float(v.real) for v in if_sig]
+        
+        if target == "complex_envelope":
+            # Baseband version of the IF signal
+            return [[float(v.real), float(v.imag)] for v in if_sig]
+        
+        if target == "adc":
+            # Simple sampling + noise
+            sigma = self._coerce_scalar(params.get("adc_noise_sigma", 0.0), 0.0)
+            adc = np.real(if_sig) + np.random.normal(0.0, sigma, size=if_sig.size)
+            return [float(v) for v in adc]
+            
+        raise ValueError(f"Unknown target signal: {target}")
+
+    def get_rf_signal(self, shot_index: int):
+        """
+        Reconstruct the Radio Frequency (RF) signal.
+        
+        The RF signal is the cavity output field shifted to the carrier frequency:
+        S_rf(t) = a_out(t) * exp(i * (2*pi*f_c*t + phi_c))
+        
+        Returns:
+            list[list[float]]: Complex signal pairs [real, imag] on the ADC time grid.
+        """
+        return self.reconstruct_shot(shot_index, "rf")
+
+    def get_if_signal(self, shot_index: int):
+        """
+        Reconstruct the Intermediate Frequency (IF) signal.
+        
+        The IF signal is the RF signal down-converted by the Local Oscillator (LO):
+        S_if(t) = S_rf(t) * exp(-i * (2*pi*f_lo*t + phi_lo))
+        
+        Returns:
+            list[list[float]]: Complex signal pairs [real, imag] on the ADC time grid.
+        """
+        return self.reconstruct_shot(shot_index, "if")
+
+    def get_adc_signal(self, shot_index: int):
+        """
+        Reconstruct the sampled ADC voltage signal.
+        
+        This represents the actual voltage measured by the ADC, which is the real part 
+        of the IF signal plus additive white Gaussian noise (AWGN):
+        V_adc[n] = Re(S_if(n*dt)) + noise
+        
+        Returns:
+            list[float]: Real-valued voltage samples on the ADC time grid.
+        """
+        return self.reconstruct_shot(shot_index, "adc")
+
+    def get_heterodyne_current(self, shot_index: int):
+        """
+        Reconstruct the heterodyne current.
+        
+        Returns the real part of the IF signal, representing the current flowing 
+        through the detection chain before sampling/quantization.
+        
+        Returns:
+            list[float]: Real-valued current samples on the ADC time grid.
+        """
+        return self.reconstruct_shot(shot_index, "heterodyne_current")
+
+    def get_complex_envelope(self, shot_index: int):
+        """
+        Reconstruct the complex baseband envelope of the IF signal.
+        
+        This is the complex-valued representation of the signal after down-conversion 
+        but before taking the real part for ADC sampling.
+        
+        Returns:
+            list[list[float]]: Complex signal pairs [real, imag] on the ADC time grid.
+        """
+        return self.reconstruct_shot(shot_index, "complex_envelope")
 
 
 @dataclass
@@ -208,12 +382,16 @@ class IQAnalysis:
         assignment_fidelity: Overall fidelity of state assignment.
         noise_sigma: Estimated noise standard deviation.
         snr: Signal-to-Noise Ratio.
+        iq_clouds: Map of state identifiers to their scattered IQ points.
+        discrimination_line: Definition of the decision boundary between states.
     """
     centroids: dict[str, complex] = field(default_factory=dict)
     confusion_matrix: dict[str, Any] = field(default_factory=dict)
     assignment_fidelity: float = 0.0
     noise_sigma: float = 0.0
     snr: float = 0.0
+    iq_clouds: dict[str, list[list[float]]] = field(default_factory=dict)
+    discrimination_line: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -273,6 +451,21 @@ class ModelAnalysis:
     scope: AnalysisScope = AnalysisScope.CASE
     output: CaseAnalysis | ParametricAnalysis | ComprehensiveAnalysis | AnalysisOutput = field(default_factory=CaseAnalysis)
     schema_version: str = "1.0"
+
+    @property
+    def metrics(self) -> dict[str, MetricSeries] | None:
+        """Compatibility proxy for output.metrics."""
+        return getattr(self.output, "metrics", None)
+
+    @property
+    def readout(self) -> ReadoutAnalysis | None:
+        """Compatibility proxy for output.readout."""
+        return getattr(self.output, "readout", None)
+
+    @property
+    def iq(self) -> IQAnalysis | None:
+        """Compatibility proxy for output.iq."""
+        return getattr(self.output, "iq", None)
 
 
 # Deprecated compatibility alias. Prefer ``ModelAnalysis`` in new code.

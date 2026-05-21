@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from musiq.analysis.trajectory_semantics import state_encoding, state_rows
+from .trajectory_semantics import state_encoding, state_rows
 from musiq.common.schemas import Observables, Trajectory
 
 

@@ -12,7 +12,7 @@ import numpy as np
 from matplotlib.collections import LineCollection
 
 from musiq.backend.config import load_backend_config
-from musiq.analysis.trajectory_semantics import state_rows
+from musiq.analysis.common.trajectory_semantics import state_rows
 from musiq.circuit.import_qasm import CircuitAdapter
 from musiq.common.schemas import BackendConfig, ChannelSpec, Observables, PulseIR, Trajectory, json_restore
 from musiq.pulse.catalog import (

@@ -74,6 +74,7 @@ class ModelRegistry:
     """Central registry for metrics and other shared resources."""
     metrics: MetricRegistry = field(default_factory=build_default_metric_registry)
 
+
 @dataclass(slots=True)
 class Solver:
     """Wrapper for solver configuration and execution."""
@@ -88,11 +89,17 @@ class Solver:
 class Profile:
     """Wrapper for profile configuration and execution."""
     model: Any
+    profile_id: str
     config: ProfileConfig
 
     def run_solver(self, solver_id: str | None = None, tag: str | None = None) -> list[str]:
         """Compile and solve one configured solver, running every study step by default."""
-        return run_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
+        original_profiles = dict(self.model.config.profiles)
+        try:
+            self.model.config.profiles = {self.profile_id: self.config}
+            return run_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
+        finally:
+            self.model.config.profiles = original_profiles
 
     def run_analysis(self, analyser_id: str | None = None, study_name: str | None = None, tag: str | None = None, run_ids: list[str] | None = None) -> None:
         """Run one analyser against every matching study trajectory into ``model.analyses``."""
@@ -106,7 +113,7 @@ class Model:
     state: ModelState = field(default_factory=ModelState)
     registry: ModelRegistry = field(default_factory=ModelRegistry)
     manifest: ModelManifest = field(default_factory=ModelManifest)
-    runs: dict[str, ModelRun] = field(default_factory=dict)
+    runs: dict[str, dict[str, ModelRun]] = field(default_factory=dict)
     analyses: dict[str, ModelAnalysis] = field(default_factory=dict)
 
     @property
@@ -132,37 +139,35 @@ class Model:
     def out_dir(self, value: str | None): self.state.last_out_dir = value
 
     def __repr__(self) -> str:
-        run_ids = sorted(self.runs.keys())
+        run_summary = {sid: sorted(studies.keys()) for sid, studies in self.runs.items()}
         analysis_ids = sorted(self.analyses.keys())
         return (
             'Model('
             f'solvers={sorted(self.config.solvers.keys())}, '
             f'analysers={[(analyser_id, cfg.solver_id) for analyser_id, cfg in sorted(self.analysers.items())]}, '
-            f'runs={run_ids}, '
+            f'runs={run_summary}, '
             f'analyses={analysis_ids}'
             ')'
         )
 
     def _clear_solver_results(self, solver_id: str) -> None:
-        for run_id in list(self.runs.keys()):
-            run_obj = self.runs[run_id]
-            if run_obj.identity.solver_id == solver_id:
-                self.runs.pop(run_id, None)
+        self.runs.pop(solver_id, None)
 
     def get_trajectory(self, solver_id: str | None = None, *, study_name: str | None = None) -> Trajectory | None:
         from musiq.workflow.model_utils import require_solver_id
         selected_solver_id = require_solver_id(self, solver_id)
+        
+        solver_runs = self.runs.get(selected_solver_id, {})
         if study_name is None:
-            run_id = find_run_id(self, solver_id=selected_solver_id, study_name_val=None)
-            if run_id:
-                run_obj = self.runs[run_id]
-                first_res = next(iter(run_obj.results.values()), None)
-                return next(iter(first_res.trajectories.values()), None) if first_res else None
-            return None
-        run_id = find_run_id(self, solver_id=selected_solver_id, study_name_val=study_name)
-        if run_id is None:
-            return None
-        run_obj = self.runs[run_id]
+            # Default to the first available study if none specified
+            if not solver_runs:
+                return None
+            run_obj = next(iter(solver_runs.values()))
+        else:
+            run_obj = solver_runs.get(study_name)
+            if run_obj is None:
+                return None
+        
         first_res = next(iter(run_obj.results.values()), None)
         return next(iter(first_res.trajectories.values()), None) if first_res else None
 
@@ -185,9 +190,13 @@ class Model:
         wanted = str(study_name).strip()
         for analysis in matching:
             for ref in analysis.input_results:
-                run_obj = self.runs.get(ref.run_id)
-                if run_obj and str(run_obj.identity.study_name or "").strip() == wanted:
-                    return analysis
+                # ref.run_id in the new structure is actually the study_name
+                # since it's stored under self.runs[solver_id][study_name]
+                # We need to check if this run_id (study_name) matches in any solver
+                for solver_id in self.runs:
+                    run_obj = self.runs[solver_id].get(ref.run_id)
+                    if run_obj and str(run_obj.identity.study_name or "").strip() == wanted:
+                        return analysis
         return None
 
     def find_analysis_for_run(self, run_id: str) -> ModelAnalysis | None:
@@ -214,7 +223,7 @@ class Model:
         """Get a profile wrapper for the specified profile ID."""
         if profile_id not in self.config.profiles:
             raise KeyError(f"Profile `{profile_id}` not found in model configuration.")
-        return Profile(self, self.config.profiles[profile_id])
+        return Profile(self, str(profile_id), self.config.profiles[profile_id])
 
     def run_all(self) -> None:
         """Run every configured solver and then every configured analyser."""
@@ -227,9 +236,6 @@ class Model:
     def run_profile(self, profile_id: str, tag: str | None = None) -> None:
         """Run one configured profile end-to-end."""
         run_profile(self, profile_id, tag=tag)
-
-
-NamedConfigPaths = str | Path | dict[str, str | Path]
 
 
 def _ensure_config(value: Any, config_type: str, base_dir: Path | None = None) -> Any:
@@ -411,10 +417,10 @@ def _build_cartesian_profiles(
             analyser_id=a_id,
         )
     
-    # If there's only one combination, we also add the "default" alias
+    # Collapse the singleton case to a single stable profile ID so run_all()
+    # does not execute the exact same resource combination twice.
     if len(profiles) == 1:
-        pid = next(iter(profiles))
-        profiles["default"] = profiles[pid]
+        return {"default": next(iter(profiles.values()))}
         
     return profiles
 
@@ -466,7 +472,7 @@ def _resolve_profiles(
 
 def create_model(
     *,
-    circuits: Any,
+    circuits: Any = None,
     solvers: Any | None = None,
     devices: Any | None = None,
     pulses: Any | None = None,

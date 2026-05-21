@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from musiq.analysis.trajectory_semantics import pointwise_compare_compatibility, state_encoding, state_rows
+from musiq.analysis.common.trajectory_semantics import pointwise_compare_compatibility, state_encoding, state_rows
 from musiq.engines.qoptics import QOpticsEngine
 from musiq.engines.qutip import QuTiPEngine
 from musiq.engines.qtoolbox import QToolboxEngine

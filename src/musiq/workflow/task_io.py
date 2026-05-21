@@ -78,6 +78,7 @@ _ANALYSER_TOP_KEYS = {
     "iq_discrimination",
     "noise_analysis",
     "report",
+    "analysis",
 }
 _CIRCUIT_TOP_KEYS = {"schema_version", "qasm_text", "qasm_path", "param_bindings", "circuit"}
 def _is_v1_circuit_payload(payload: dict[str, Any]) -> bool:
@@ -506,6 +507,11 @@ def analyser_from_payload(payload: dict[str, Any]) -> AnalyserConfig:
     """Convert an analyser payload dictionary into an ``AnalyserConfig`` object."""
     _reject_unknown("analyser top-level", set(payload), _ANALYSER_TOP_KEYS)
 
+    # Parse hierarchical analysis steps
+    analysis_steps = list(payload.get("analysis", []) or [])
+    if not isinstance(analysis_steps, list):
+        raise ValueError("Analyser config `analysis` must be a list of analysis steps.")
+
     trajectory_raw = dict(payload.get("trajectory", {}) or {})
     trajectory_known = {k: v for k, v in trajectory_raw.items() if k in {"window_start", "window_end", "stride"}}
     trajectory_extras = {k: v for k, v in trajectory_raw.items() if k not in trajectory_known}
@@ -531,6 +537,7 @@ def analyser_from_payload(payload: dict[str, Any]) -> AnalyserConfig:
     return AnalyserConfig(
         solver_id=str(payload.get("solver_id")).strip() or None if payload.get("solver_id") is not None else None,
         trajectory=AnalyserTrajectoryConfig(**trajectory_known, extras=trajectory_extras),
+        analysis=analysis_steps,
         case_metrics=list(payload.get("case_metrics", []) or payload.get("metrics", []) or []) or None,
         sweep_metrics=list(payload.get("sweep_metrics", []) or payload.get("parametric_metrics", []) or []) or None,
         metrics=list(payload.get("metrics", []) or []) or None,

@@ -3,6 +3,6 @@ pulse:
   gate_duration_ns: 15.0
   idle_duration_ns: 100.0
   measure_duration_ns: 15.0
-  xy_freq_Hz: 0.0
+  xy_freq_Hz: 5.0e9
   single_qubit_shape: rect
   single_qubit_rect_edge_ns: 0.0

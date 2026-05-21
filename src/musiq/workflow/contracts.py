@@ -232,14 +232,23 @@ class ReportConfig:
 
 @dataclass(slots=True)
 class AnalyserConfig:
-    """Default analyser config bound to one solver trajectory."""
+    """Default analyser config. Now supports hierarchical analysis steps."""
 
     solver_id: str | None = None
+    # Legacy support for trajectory filtering
     trajectory: AnalyserTrajectoryConfig = field(default_factory=AnalyserTrajectoryConfig)
+    
+    # New Hierarchical Analysis Definition
+    # Each step: {name: str, level: "CASE"|"PARAMETRIC"|"COMPREHENSIVE", metrics: list[str], ...}
+    analysis: list[dict[str, Any]] = field(default_factory=list)
+    
+    # Legacy metrics fields (maintained for backward compatibility during migration)
     case_metrics: list[dict] | list[str] | None = None
     sweep_metrics: list[str] | None = None
     metrics: list[dict] | list[str] | None = None
     parametric_metrics: list[str] | None = None
+    
+    # Legacy typed configs (will be migrated to analysis step extras)
     readout_model: ReadoutModelConfig = field(default_factory=ReadoutModelConfig)
     iq_discrimination: IQDiscriminationConfig = field(default_factory=IQDiscriminationConfig)
     noise_analysis: NoiseAnalysisConfig = field(default_factory=NoiseAnalysisConfig)
@@ -262,13 +271,17 @@ class AnalyserConfig:
         if self.solver_id:
             payload["solver_id"] = str(self.solver_id)
         
-        # Convert typed configs back to dicts for the analysis stages
+        # Modern hierarchical analysis
+        payload["analysis"] = list(self.analysis)
+        
+        # Legacy components
         payload["trajectory"] = _payload_dict(self.trajectory)
         payload["readout_model"] = _payload_dict(self.readout_model)
         payload["iq_discrimination"] = _payload_dict(self.iq_discrimination)
         payload["noise_analysis"] = _payload_dict(self.noise_analysis)
         payload["report"] = _payload_dict(self.report)
         
+        # Backward compatibility for metrics
         case_metrics = self.case_metrics if self.case_metrics is not None else self.metrics
         sweep_metrics = self.sweep_metrics if self.sweep_metrics is not None else self.parametric_metrics
         if case_metrics:

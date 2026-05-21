@@ -1,0 +1,71 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  seed: 12345
+  mcwf_ntraj: 8
+  study:
+    - name: prep_0
+      description: Quantum CQED readout with the qubit initialized in |0>.
+      active_components: [q0, r0, ro0]
+      active_connections: [dispersive_q0_r0, readout_r0_ro0]
+      prep_state:
+        label: "0"
+        sequence: []
+      representations:
+        q0: quantum
+        r0: quantum
+        ro0: classical
+      bases:
+        q0:
+          kind: nlevel
+          levels: 2
+        r0:
+          kind: fock
+          nmax: 10
+      solver_mode: mcwf
+      time:
+        dt_s: 5.0e-10
+        t_end_s: 420e-9
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options:
+        subsystem_model: cqed_dispersive
+        readout_protocol: dispersive_reflectometry
+
+    - name: prep_1
+      description: Quantum CQED readout with the qubit initialized in |1> and allowed to decay during measurement.
+      active_components: [q0, r0, ro0]
+      active_connections: [dispersive_q0_r0, readout_r0_ro0]
+      prep_state:
+        label: "1"
+        sequence:
+          - name: x
+            qubits: [0]
+      representations:
+        q0: quantum
+        r0: quantum
+        ro0: classical
+      bases:
+        q0:
+          kind: nlevel
+          levels: 2
+        r0:
+          kind: fock
+          nmax: 10
+      solver_mode: mcwf
+      time:
+        dt_s: 5.0e-10
+        t_end_s: 420e-9
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options:
+        subsystem_model: cqed_dispersive
+        readout_protocol: dispersive_reflectometry
+  schedule:
+    policy: serial

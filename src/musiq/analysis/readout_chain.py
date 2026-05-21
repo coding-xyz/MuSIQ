@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from dataclasses import asdict
 
 import numpy as np
 from musiq.schemas.results import IQAnalysis, ReadoutAnalysis, ShotData
@@ -263,22 +264,6 @@ def _sample_readout_drive(pulse_ir, times: np.ndarray) -> np.ndarray:
     return drive
 
 
-def _infer_chain_params(model_payload: dict[str, Any]) -> dict[str, float | str]:
-    device = normalize_device_config(
-        {
-            "components": list(model_payload.get("components", []) or []),
-            "connections": list(model_payload.get("connections", []) or []),
-        }
-    )
-    topology = readout_topology_input(
-        device.components,
-        device.connections,
-        primary_step=dict(model_payload.get("primary_step", {}) or {}),
-        readout_chain=dict(model_payload.get("readout_chain", {}) or {}),
-    )
-    return infer_classical_readout_chain(topology)
-
-
 def _nearest_centroid(point: complex, centroids: dict[str, complex]) -> str:
     if not centroids:
         return ""
@@ -300,27 +285,26 @@ def _integrate_window(times: np.ndarray, i_trace: np.ndarray, q_trace: np.ndarra
     return complex(i_int, q_int)
 
 
-def _shot_complex_trace(shot: dict[str, Any]) -> np.ndarray:
-    measured_voltage = _complex_from_pairs(list(shot.get("measured_voltage", []) or []))
-    if measured_voltage.size > 0:
-        return measured_voltage
-    heterodyne_current = _complex_from_pairs(list(shot.get("heterodyne_current", []) or []))
-    if heterodyne_current.size > 0:
-        return heterodyne_current
-    i_vals = list(shot.get("heterodyne_I", []) or [])
-    q_vals = list(shot.get("heterodyne_Q", []) or [])
-    if i_vals or q_vals:
-        i_arr = np.asarray(i_vals, dtype=float).reshape(-1)
-        q_arr = np.asarray(q_vals, dtype=float).reshape(-1)
-        size = min(i_arr.size, q_arr.size) if i_arr.size and q_arr.size else max(i_arr.size, q_arr.size)
-        if size <= 0:
-            return np.asarray([], dtype=complex)
-        if i_arr.size < size:
-            i_arr = np.pad(i_arr, (0, size - i_arr.size))
-        if q_arr.size < size:
-            q_arr = np.pad(q_arr, (0, size - q_arr.size))
-        return i_arr.astype(complex) + 1j * q_arr.astype(complex)
-    return np.asarray([], dtype=complex)
+def _shot_integrated_iq(shot_payload: dict[str, Any], integrated_iq: complex | None) -> complex | None:
+    raw_point = shot_payload.get("integrated_iq")
+    if isinstance(raw_point, list) and len(raw_point) >= 2:
+        return complex(float(raw_point[0]), float(raw_point[1]))
+    return integrated_iq
+
+
+def _shot_trace_integrated_iq(
+    shot_payload: dict[str, Any],
+    times: np.ndarray,
+    t0: float,
+    t1: float,
+) -> complex | None:
+    measured = _complex_from_pairs(list(shot_payload.get("measured_voltage", []) or []))
+    if measured.size > 0:
+        return _integrate_window(times, np.real(measured), np.imag(measured), t0, t1)
+    heterodyne = _complex_from_pairs(list(shot_payload.get("heterodyne_current", []) or []))
+    if heterodyne.size > 0:
+        return _integrate_window(times, np.real(heterodyne), np.imag(heterodyne), t0, t1)
+    return None
 
 
 def build_readout_analysis(
@@ -328,249 +312,243 @@ def build_readout_analysis(
     trajectory,
     model_spec,
     pulse_ir,
-    pulse_cfg: dict[str, Any] | None,
-    analyser_cfg: dict[str, Any] | None,
+    pulse_cfg: Any,
+    device_cfg: Any,
     seed: int,
 ) -> dict[str, Any]:
-    """Build readout-chain and IQ-classification analysis payloads."""
-    analyser_cfg = dict(analyser_cfg or {})
-    pulse_cfg = dict(pulse_cfg or {})
-    readout_cfg = dict(analyser_cfg.get("readout_model", {}) or {})
-    iq_cfg = dict(analyser_cfg.get("iq_discrimination", {}) or {})
-    noise_cfg = dict(analyser_cfg.get("noise_analysis", {}) or {})
-    if not readout_cfg and not iq_cfg and not noise_cfg:
-        return {}
+    """
+    Build Case-level readout analysis.
+    Responsibility: Signal chain reconstruction and IQ point integration for a single trajectory.
+    """
+    # Ensure configs are dictionaries
+    p_cfg = asdict(pulse_cfg) if hasattr(pulse_cfg, "__dataclass_fields__") else dict(pulse_cfg or {})
+    d_cfg = asdict(device_cfg) if hasattr(device_cfg, "__dataclass_fields__") else dict(device_cfg or {})
+    
+    pulse_cfg = p_cfg
+    device_cfg = d_cfg
 
-    payload = dict(getattr(model_spec, "payload", {}) or {})
+    # ``run_analysis`` passes the typed workflow ``DeviceConfig`` dataclass, whose
+    # actual component graph lives under the nested ``device`` key. Older callers
+    # pass the component graph directly. Support both so we can always recover the
+    # ``ro0`` receiver parameters used for RF/ADC reconstruction.
+    device_payload = dict(device_cfg.get("device", {}) or {}) if isinstance(device_cfg.get("device"), dict) else dict(device_cfg)
+    
+    # Get RO line parameters from device components (Flat structure as agreed)
+    ro0_params = {}
+    for comp in list(device_payload.get("components", []) or []):
+        if str(comp.get("id", "")).strip() == "ro0":
+            ro0_params = dict(comp.get("parameters", {}) or {})
+            break
+    if not ro0_params:
+        # Fallback to legacy single-device payloads that expose parameters directly.
+        ro0_params = dict(device_payload.get("parameters", {}) or {})
+
     obs = dict((getattr(trajectory, "classical", {}) or {}).get("readout", {}) or {})
     times = np.asarray(list(getattr(trajectory, "times", []) or []), dtype=float)
+    
+    if times.size <= 0:
+        return {}
+
+    # 1. Physical Signal Reconstruction
     a_in_obs = _complex_from_pairs(list(obs.get("a_in", []) or []))
     cavity_a = _complex_from_pairs(list(obs.get("cavity_a", []) or []))
     a_out_obs = _complex_from_pairs(list(obs.get("a_out", []) or []))
-    line_state = _complex_from_pairs(list(obs.get("line_state", []) or []))
-    measured_voltage = _complex_from_pairs(list(obs.get("measured_voltage", []) or []))
-    shot_payloads = [dict(item) for item in list(obs.get("shots", []) or []) if isinstance(item, dict)]
-    if times.size <= 0 or cavity_a.size <= 0:
-        return {}
-
+    
+    # Drive signal if not observed
     drive = a_in_obs if a_in_obs.size > 0 else _sample_readout_drive(pulse_ir, times)
-    chain = _infer_chain_params(payload)
-    chain.update(dict(obs.get("chain", {}) or {}))
-    eta_chain = max(1.0e-6, _safe_float(chain.get("eta_chain", 1.0), 1.0))
-    added_noise_photons = max(0.0, _safe_float(chain.get("added_noise_photons", 0.0), 0.0))
-    coupling_scale = _readout_coupling_prefactor(_safe_float(chain.get("kappa_ext_Hz", 0.0), 0.0))
-
+    
+    # Coupling prefactor from RO line
+    kappa_ext = _safe_float(ro0_params.get("kappa_ext_Hz", 0.0), 0.0)
+    coupling_scale = _readout_coupling_prefactor(kappa_ext)
+    
+    # Actual output field
     a_out = a_out_obs if a_out_obs.size > 0 else (drive - coupling_scale * cavity_a)
-
-    demod_cfg = dict((pulse_cfg.get("acquisition", {}) or {}).get("demodulation", {}) or {})
-    demod_phase = _safe_float(demod_cfg.get("phase_rad", 0.0), 0.0)
-    if_Hz = _safe_float(demod_cfg.get("if_Hz", 0.0), 0.0)
-    heterodyne_current = _complex_from_pairs(list(obs.get("heterodyne_current", []) or []))
-    baseband_source = measured_voltage if measured_voltage.size > 0 else (heterodyne_current if heterodyne_current.size > 0 else (line_state if line_state.size > 0 else a_out))
-    lo = np.exp(1j * (2.0 * math.pi * if_Hz * times + demod_phase)) if times.size > 0 else np.asarray([], dtype=complex)
-    ro_line_if = baseband_source * lo if lo.size > 0 else np.asarray(baseband_source, dtype=complex)
-    baseband = baseband_source * complex(math.cos(-demod_phase), math.sin(-demod_phase))
-
+    
+    # 2. Receiver Processing
+    # Use agreed-upon flat parameters from ro0
+    carrier_freq = _safe_float(ro0_params.get("carrier_frequency_Hz", 0.0), 0.0)
+    lo_freq = _safe_float(ro0_params.get("lo_frequency_Hz", 0.0), 0.0)
+    if_freq = _safe_float(ro0_params.get("if_frequency_Hz", 0.0), 0.0)
+    rf_phase = _safe_float(ro0_params.get("rf_phase_rad", 0.0), 0.0)
+    if_phase = _safe_float(ro0_params.get("if_phase_rad", 0.0), 0.0)
+    digital_lo_phase = _safe_float(ro0_params.get("digital_lo_phase_rad", 0.0), 0.0)
+    adc_rate = _safe_float(ro0_params.get("adc_sample_rate_Hz", 0.0), 0.0)
+    
     rng = np.random.default_rng(int(seed))
-    noise_sigma = max(
-        1.0e-4,
-        math.sqrt(max(added_noise_photons, 0.0) / eta_chain) * 1.0e-2 + _safe_float(payload.get("noise_cfg", {}).get("readout_error", 0.0), 0.0),
-    )
+    
+    # Inject flattened params into the 'receiver' sub-dict for compatibility with _receiver_traces
+    receiver_fake_cfg = {"receiver": ro0_params}
+    
     receiver = _receiver_traces(
         times=times,
-        complex_envelope=baseband_source,
+        complex_envelope=a_out,
         pulse_ir=pulse_ir,
-        readout_cfg=readout_cfg,
+        readout_cfg=receiver_fake_cfg,
         pulse_cfg=pulse_cfg,
-        chain=chain,
+        chain=ro0_params,
         rng=rng,
     )
-    adc_times = np.asarray(receiver.get("adc_times", times), dtype=float)
-    adc_signal = np.asarray(receiver.get("adc_signal", []), dtype=float)
-    digital_baseband = np.asarray(receiver.get("digital_baseband", []), dtype=complex)
-    if digital_baseband.size > 0:
-        i_trace = np.real(digital_baseband)
-        q_trace = np.imag(digital_baseband)
-    elif measured_voltage.size > 0 or line_state.size > 0:
-        i_trace = np.real(baseband)
-        q_trace = np.imag(baseband)
-    else:
-        i_trace = np.real(baseband) + rng.normal(0.0, noise_sigma, size=times.size)
-        q_trace = np.imag(baseband) + rng.normal(0.0, noise_sigma, size=times.size)
 
+    # 3. IQ Integration
+    adc_times = np.asarray(receiver.get("adc_times", times), dtype=float)
+    digital_baseband = np.asarray(receiver.get("digital_baseband", []), dtype=complex)
+    
     measure_windows = _extract_readout_windows(pulse_ir)
     integration_window_s = _safe_float((pulse_cfg.get("acquisition", {}) or {}).get("integration_window_ns", 0.0), 0.0) * 1.0e-9
     start_delay_s = _safe_float((pulse_cfg.get("acquisition", {}) or {}).get("start_delay_ns", 0.0), 0.0) * 1.0e-9
+    
     if integration_window_s <= 0.0:
         integration_window_s = _safe_float(pulse_cfg.get("measure_duration_ns", 0.0), 0.0) * 1.0e-9
 
-    calibration = list(iq_cfg.get("calibration_states", []) or [])
-    labels = [str(item.get("label", f"state_{idx}")) for idx, item in enumerate(calibration)] if calibration else []
-    if not labels:
-        labels = [f"state_{idx}" for idx in range(len(measure_windows))]
+    # For Case level, we integrate the first window as the primary IQ point
+    integrated_iq = None
+    if measure_windows and digital_baseband.size > 0:
+        window = measure_windows[0]
+        t0 = float(window["t0_s"]) + start_delay_s
+        t1 = min(float(window["t1_s"]), t0 + integration_window_s)
+        integrated_iq = _integrate_window(adc_times, np.real(digital_baseband), np.imag(digital_baseband), t0, t1)
 
-    iq_samples: list[dict[str, Any]] = []
-    centroids: dict[str, complex] = {}
-    actual_clouds: dict[str, list[list[float]]] = {}
-    if shot_payloads:
-        window_points: dict[str, list[complex]] = {}
-        shot_views: list[dict[str, Any]] = []
-        for shot_index, shot in enumerate(shot_payloads):
-            shot_voltage = _shot_complex_trace(shot)
-            if shot_voltage.size <= 0:
-                continue
-            shot_receiver = _receiver_traces(
-                times=times,
-                complex_envelope=shot_voltage,
-                pulse_ir=pulse_ir,
-                readout_cfg=readout_cfg,
-                pulse_cfg=pulse_cfg,
-                chain=chain,
-                rng=np.random.default_rng(int(seed) + shot_index + 1),
-            )
-            shot_views.append(
-                {
-                    "trajectory_index": shot_index,
-                    "complex_envelope": _complex_pairs(np.asarray(shot_voltage, dtype=complex)),
-                    "adc_times": _real_list(np.asarray(shot_receiver.get("adc_times", []), dtype=float)),
-                    "adc_signal": _real_list(np.asarray(shot_receiver.get("adc_signal", []), dtype=float)),
-                    "digital_baseband": _complex_pairs(np.asarray(shot_receiver.get("digital_baseband", []), dtype=complex)),
-                    "alias_frequency_Hz": float(shot_receiver.get("alias_frequency_Hz", 0.0)),
-                    "alias_frequency_signed_Hz": float(shot_receiver.get("alias_frequency_signed_Hz", 0.0)),
-                }
-            )
-        for idx, window in enumerate(measure_windows):
-            label = labels[idx] if idx < len(labels) else f"state_{idx}"
-            t0 = float(window["t0_s"]) + start_delay_s
-            t1 = min(float(window["t1_s"]), t0 + integration_window_s)
-            points: list[complex] = []
-            for shot_view in shot_views:
-                shot_baseband = _complex_from_pairs(list(shot_view.get("digital_baseband", []) or []))
-                shot_times = np.asarray(list(shot_view.get("adc_times", []) or []), dtype=float)
-                if shot_baseband.size <= 0 or shot_times.size <= 0:
-                    continue
-                point = _integrate_window(shot_times, np.real(shot_baseband), np.imag(shot_baseband), t0, t1)
-                if point is not None:
-                    points.append(point)
-            if not points:
-                continue
-            window_points[label] = points
-            center = sum(points) / float(len(points))
-            centroids[label] = center
-            actual_clouds[label] = [[float(p.real), float(p.imag)] for p in points]
-            iq_samples.append(
-                {
-                    "label": label,
-                    "channel": window["channel"],
-                    "window_s": {"t0": t0, "t1": t1},
-                    "integrated_iq": [float(center.real), float(center.imag)],
-                }
-            )
-        labels = [item["label"] for item in iq_samples]
-        confusion = np.zeros((len(labels), len(labels)), dtype=int)
-        for i, label in enumerate(labels):
-            for point in window_points.get(label, []):
-                pred = _nearest_centroid(point, centroids)
-                if pred in labels:
-                    confusion[i, labels.index(pred)] += 1
-        synthetic_clouds = actual_clouds
-    else:
-        for idx, window in enumerate(measure_windows):
-            label = labels[idx] if idx < len(labels) else f"state_{idx}"
-            t0 = float(window["t0_s"]) + start_delay_s
-            t1 = min(float(window["t1_s"]), t0 + integration_window_s)
-            point = _integrate_window(adc_times if adc_times.size > 0 else times, i_trace, q_trace, t0, t1)
-            if point is None:
-                continue
-            centroids[label] = point
-            iq_samples.append(
-                {
-                    "label": label,
-                    "channel": window["channel"],
-                    "window_s": {"t0": t0, "t1": t1},
-                    "integrated_iq": [float(point.real), float(point.imag)],
-                }
-            )
+    shot_window_t0 = None
+    shot_window_t1 = None
+    if measure_windows:
+        shot_window_t0 = float(measure_windows[0]["t0_s"]) + start_delay_s
+        shot_window_t1 = min(float(measure_windows[0]["t1_s"]), shot_window_t0 + integration_window_s)
 
-        labels = [item["label"] for item in iq_samples]
-        shots = int(iq_cfg.get("shots", 128) or 128)
-        synthetic_clouds = {}
-        confusion = np.zeros((len(labels), len(labels)), dtype=int)
-        for i, label in enumerate(labels):
-            center = centroids[label]
-            points: list[list[float]] = []
-            for _ in range(max(1, shots)):
-                point = center + complex(rng.normal(0.0, noise_sigma), rng.normal(0.0, noise_sigma))
-                pred = _nearest_centroid(point, centroids)
-                if pred in labels:
-                    confusion[i, labels.index(pred)] += 1
-                points.append([float(point.real), float(point.imag)])
-            synthetic_clouds[label] = points
-
-    assignment_fidelity = float(np.trace(confusion) / max(1, confusion.sum())) if confusion.size else 0.0
-    pairwise_distances = [
-        abs(centroids[a] - centroids[b])
-        for i, a in enumerate(labels)
-        for b in labels[i + 1 :]
-    ]
-    cluster_separation = float(min(pairwise_distances) / max(noise_sigma, 1.0e-12)) if pairwise_distances else 0.0
-    snr = float((np.mean(pairwise_distances) if pairwise_distances else 0.0) / max(2.0 * noise_sigma, 1.0e-12))
-
-    # Map to typed ReadoutAnalysis
-    readout_analysis = ReadoutAnalysis(
-        signals={
-            "quantum": {
-                "cavity_a": _complex_pairs(cavity_a),
-                "cavity_n": [float(x) for x in list(obs.get("cavity_n", []) or [])],
-                "qubit_lowering": list(obs.get("qubit_lowering", []) or []),
-            },
-            "io_chain": {
-                "a_in": _complex_pairs(drive),
-                "a_out": _complex_pairs(a_out),
-                "line_state": _complex_pairs(line_state) if line_state.size > 0 else [],
-                "heterodyne_current": _complex_pairs(heterodyne_current) if heterodyne_current.size > 0 else [],
-                "ro_line_if": _complex_pairs(ro_line_if),
-                "complex_envelope": _complex_pairs(np.asarray(receiver.get("complex_envelope", baseband_source), dtype=complex)),
-                "rf_signal": _real_list(np.asarray(receiver.get("rf_signal", []), dtype=float)),
-                "if_signal": _real_list(np.asarray(receiver.get("if_signal", []), dtype=float)),
-                "adc_signal": _real_list(np.asarray(receiver.get("adc_signal", []), dtype=float)),
-            },
-        },
-        demodulation={
-            "phase_rad": demod_phase,
-            "if_Hz": if_Hz,
-            "source": "complex_envelope" if measured_voltage.size > 0 else ("heterodyne_current" if heterodyne_current.size > 0 else ("line_state" if line_state.size > 0 else "a_out")),
-        },
-        shots=[
+    shot_payloads = list(obs.get("shots", []) or [])
+    shots: list[ShotData] = []
+    integrated_points: list[complex] = []
+    for shot_payload in shot_payloads:
+        shot_dict = dict(shot_payload or {})
+        shot_point = None
+        if shot_window_t0 is not None and shot_window_t1 is not None:
+            shot_point = _shot_trace_integrated_iq(shot_dict, times, shot_window_t0, shot_window_t1)
+        if shot_point is None:
+            shot_point = _shot_integrated_iq(shot_dict, integrated_iq)
+        if shot_point is not None:
+            integrated_points.append(shot_point)
+        shots.append(
             ShotData(
-                timestamp=float(sv.get("adc_times", [0.0])[0]),
-                value=None, # Baseband trace is in digital_baseband
-                metadata={"complex_envelope": sv.get("complex_envelope")}
-            ) for sv in shot_views
-        ] if shot_payloads else [],
+                timestamp=float(times[0]) if times.size > 0 else 0.0,
+                a_out=shot_dict.get("a_out"),
+                integrated_iq=[float(shot_point.real), float(shot_point.imag)] if shot_point is not None else None,
+                metadata={
+                    k: v
+                    for k, v in shot_dict.items()
+                    if k not in {"a_out", "integrated_iq"}
+                },
+            )
+        )
+    if not integrated_points and integrated_iq is not None:
+        integrated_points.append(integrated_iq)
+
+    return ReadoutAnalysis(
+        sim_times=list(times),
+        adc_times=list(adc_times),
+        chain_params={
+            "carrier_freq": carrier_freq,
+            "adc_rate": adc_rate,
+            **ro0_params,
+        },
+        signals={
+            "intracavity_field": cavity_a,
+            "outgoing_field": a_out,
+            "complex_envelope": digital_baseband,
+            "rf_signal": receiver.get("rf_signal"),
+            "adc_signal": receiver.get("adc_signal"),
+        },
+        demodulation=receiver,
+        shots=shots,
+        integrated_points=integrated_points,
     )
+
+def build_iq_analysis(
+    *,
+    case_results: list[dict[str, Any]],
+    labels: list[str],
+    seed: int,
+) -> IQAnalysis:
+    """
+    Build Comprehensive-level IQ analysis.
+    Responsibility: Aggregate case results to compute centroids, clouds, and fidelity.
+    """
+    rng = np.random.default_rng(int(seed))
     
-    # Map to typed IQAnalysis
-    iq_analysis = IQAnalysis(
-        centroids={label: val for label, val in centroids.items()},
+    # 1. Aggregate IQ Clouds
+    clouds: dict[str, list[complex]] = {label: [] for label in labels}
+    
+    for i, res in enumerate(case_results):
+        if i >= len(labels): break
+        label = labels[i]
+        iq_values = res.get("integrated_iq")
+        if iq_values is None:
+            continue
+        if isinstance(iq_values, list):
+            for item in iq_values:
+                if item is not None:
+                    clouds[label].append(complex(item))
+            continue
+        clouds[label].append(complex(iq_values))
+    
+    # 2. Calculate Centroids
+    centroids: dict[str, complex] = {}
+    for label, points in clouds.items():
+        if points:
+            centroids[label] = sum(points) / len(points)
+        else:
+            centroids[label] = 0.0 + 0.0j
+
+    # 3. Confusion Matrix & Fidelity
+    labels_list = list(centroids.keys())
+    n_labels = len(labels_list)
+    confusion = np.zeros((n_labels, n_labels), dtype=int)
+    
+    for i, label in enumerate(labels_list):
+        for point in clouds[label]:
+            pred = _nearest_centroid(point, centroids)
+            if pred in labels_list:
+                confusion[i, labels_list.index(pred)] += 1
+    
+    fidelity = float(np.trace(confusion) / max(1, confusion.sum())) if confusion.size else 0.0
+    
+    # 4. SNR and separation
+    pairwise_dist = []
+    for i, l1 in enumerate(labels_list):
+        for l2 in labels_list[i+1:]:
+            pairwise_dist.append(abs(centroids[l1] - centroids[l2]))
+    
+    first_label = labels_list[0] if labels_list else None
+    noise_sigma = 0.0
+    if first_label and clouds[first_label]:
+        pts = np.asarray(clouds[first_label])
+        noise_sigma = float(np.std(np.abs(pts - centroids[first_label])))
+    
+    snr = float(np.mean(pairwise_dist) / (2 * noise_sigma) if pairwise_dist and noise_sigma > 0 else 0.0)
+
+    # 5. Discrimination Line (Simple bisector for 2 states)
+    discrimination_line = None
+    if n_labels == 2:
+        c0, c1 = centroids[labels_list[0]], centroids[labels_list[1]]
+        diff = c1 - c0
+        dist = abs(diff)
+        if dist > 1e-15:
+            mid = (c0 + c1) / 2
+            slope = diff / dist # Direction vector
+            discrimination_line = {
+                "midpoint": [mid.real, mid.imag],
+                "normal": [slope.real, slope.imag],
+            }
+
+    return IQAnalysis(
+        centroids={l: v for l, v in centroids.items()},
         confusion_matrix={
-            "labels": labels,
+            "labels": labels_list,
             "values": confusion.astype(int).tolist(),
         },
-        assignment_fidelity=assignment_fidelity,
-        noise_sigma=float(noise_sigma),
+        assignment_fidelity=fidelity,
+        noise_sigma=noise_sigma,
         snr=snr,
+        iq_clouds={l: [[p.real, p.imag] for p in pts] for l, pts in clouds.items()},
+        discrimination_line=discrimination_line,
     )
-    
-    return {
-        "readout": readout_analysis,
-        "iq": iq_analysis,
-        "legacy_payload": { # Keep for temporary backward compatibility in stages.py
-            "readout": { "mode": str(readout_cfg.get("mode", "input_output_v1")), "times": times.astype(float).tolist() },
-            "iq": { "labels": labels, "samples": iq_samples }
-        }
-    }
 
-
-__all__ = ["build_readout_analysis"]
-
+__all__ = ["build_readout_analysis", "build_iq_analysis"]

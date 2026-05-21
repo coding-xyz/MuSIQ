@@ -1,0 +1,64 @@
+schema_version: "3.0"
+device:
+  components:
+    - id: r0
+      type: resonator
+      description: "Classical readout cavity with a hidden-state-dependent dispersive shift."
+      ports:
+        input: ro_in
+        output: ro_out
+      parameters:
+        freq_Hz: 6.450e9                 # 谐振腔的物理共振中心频率
+        kappa_int_Hz: 0.80e6            # 谐振腔内部损耗率
+        kappa_ext_Hz: 4.50e6            # 谐振腔外部耦合率
+        chi_Hz: -0.45e6                 # 色散移位
+
+    - id: ro0
+      type: readout_line
+      description: "Classical feedline and amplification chain for readout."
+      ports:
+        input: line_in
+        output: line_out
+      parameters:
+        # --- 链路性能参数 ---
+        impedance_Ohm: 50.0             # 特征阻抗
+        eta_chain: 0.38                 # 整体量子效率
+        gain_dB: 12.0                   # 链路总增益
+        bandwidth_Hz: 6.00e6            # 读出带宽
+        
+        # --- 信号驱动与接收配置 ---
+        mode: direct_adc                # 采样模式
+        carrier_frequency_Hz: 6.450e9   # 探测信号的载波频率 (由信号源决定)
+        lo_frequency_Hz: 5.800e9        # 本振频率
+        if_frequency_Hz: 650.0e6        # 中频频率
+        rf_phase_rad: 0.0               # RF 相位
+        if_phase_rad: 0.0               # IF 相位
+        digital_lo_phase_rad: 0.0       # 数字本振相位
+        adc_sample_rate_Hz: 1.0e9       # ADC 采样率
+        
+        # --- 噪声分布 ---
+        added_noise_photons: 18.0       # 链路新增噪声光子数
+        rf_noise_sigma: 0.0             # RF 噪声标准差
+        adc_noise_sigma: 150.0          # ADC 量化噪声标准差
+        input_amplitude_noise_rel_sigma: 0.18 # 输入幅度相对噪声
+        input_phase_noise_std_rad: 0.14       # 输入相位噪声标准差
+        input_additive_noise_sigma: 100.0     # 输入加性噪声标准差
+
+  connections:
+    - id: readout_r0_ro0
+      type: readout_feedline
+      a: r0
+      b: ro0
+      parameters:
+        kappa_ext_Hz: 4.50e6
+        eta_chain: 0.80
+        bandwidth_Hz: 6.00e6
+        input_output:
+          cavity_equation: "dalpha/dt = -(i*Delta_eff + kappa/2) alpha + sqrt(kappa_ext)*a_in(t)"
+          output_equation: "a_out(t) = a_in(t) - sqrt(kappa_ext) * alpha(t)"
+
+  simulation_level: cqed
+  control_scale: 1.0
+
+noise:
+  readout_error: 0.05

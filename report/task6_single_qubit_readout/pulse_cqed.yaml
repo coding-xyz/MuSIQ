@@ -1,0 +1,62 @@
+schema_version: "3.0"
+pulse:
+  channels:
+    - name: RO_r0
+      kind: readout_drive
+      target: r0
+      port: ro_in
+    - name: LO_r0
+      kind: readout_lo
+      target: ro0
+      port: line_in
+
+  carriers:
+    RO_r0:
+      freq_Hz: 6.450e9
+      phase_rad: 0.0
+    LO_r0:
+      freq_Hz: 5.800e9
+      phase_rad: -1.5707963267948966
+
+  waveforms:
+    readout_kick:
+      shape: readout
+      duration_ns: 40.0
+      rise_ns: 10.0
+      fall_ns: 0.0
+    readout_hold:
+      shape: readout
+      duration_ns: 180.0
+      rise_ns: 0.0
+      fall_ns: 10.0
+
+  operations:
+    measure:
+      - channel: RO_r0
+        waveform: readout_kick
+        scale: 0.0625
+      - channel: RO_r0
+        waveform: readout_hold
+        scale: 0.01875
+
+  schedule:
+    policy: serial
+
+  acquisition:
+    mode: heterodyne
+    measure_start_delay_ns: 20.0
+    integration_window_ns: 160.0
+    start_delay_ns: 28.0
+    demodulation:
+      lo_channel: LO_r0
+      if_Hz: 650.0e6
+      phase_rad: 0.0
+    iq_discrimination:
+      enabled: true
+      method: linear_discriminant
+      labels: ["1"]
+    noise_analysis:
+      enabled: true
+      estimate_snr: true
+      estimate_cluster_spread: true
+      estimate_assignment_error: true

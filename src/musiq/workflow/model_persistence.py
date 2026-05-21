@@ -19,6 +19,7 @@ from musiq.schemas.results import (
     ModelAnalysis,
     ParameterAxis,
     ParametricAnalysis,
+    ParameterValues,
     ReadoutAnalysis,
     ResultRef,
     RunProvenance,
@@ -200,15 +201,20 @@ def _restore_readout_analysis(payload: dict[str, Any] | None) -> ReadoutAnalysis
     shots = [
         ShotData(
             timestamp=float(dict(item or {}).get("timestamp", 0.0) or 0.0),
-            value=dict(item or {}).get("value"),
+            a_out=dict(item or {}).get("a_out"),
+            integrated_iq=list(dict(item or {}).get("integrated_iq", []) or []) or None,
             metadata=dict(dict(item or {}).get("metadata", {}) or {}),
         )
         for item in list(raw.get("shots", []) or [])
     ]
     return ReadoutAnalysis(
+        sim_times=list(raw.get("sim_times", []) or []),
+        adc_times=list(raw.get("adc_times", []) or []),
+        chain_params=dict(raw.get("chain_params", {}) or {}),
         signals=dict(raw.get("signals", {}) or {}),
         demodulation=dict(raw.get("demodulation", {}) or {}),
         shots=shots,
+        integrated_points=list(raw.get("integrated_points", []) or []),
     )
 
 
@@ -352,7 +358,7 @@ def save_model(model: Any, path: str | Path | None = None) -> Path:
     write_json(config_dir / 'config.json', config_meta_payload)
 
     solver_manifest: dict[str, str] = {}
-    for sid, scfg in model.solvers.items():
+    for sid, scfg in model.config.solvers.items():
         rel = f'config/solvers/{sid}.json'
         solver_payload = compact_payload(
             public_value(scfg),
@@ -389,33 +395,37 @@ def save_model(model: Any, path: str | Path | None = None) -> Path:
     # 2. Runs Layer
     runs_dir = out / 'runs'
     runs_dir.mkdir(parents=True, exist_ok=True)
-    for run_id, run_obj in model.runs.items():
-        run_root = runs_dir / run_id
-        run_root.mkdir(parents=True, exist_ok=True)
-        
-        # Identity & Task
-        write_json(run_root / 'identity.json', public_value(run_obj.identity))
-        write_json(run_root / 'runtime_task.json', public_value(run_obj.runtime_task))
-        
-        # Artifacts
-        art_dir = run_root / 'artifacts'
-        art_dir.mkdir(parents=True, exist_ok=True)
-        arts = run_obj.artifacts
-        if arts.compile_report: write_json(art_dir / 'compile_report.json', public_value(arts.compile_report))
-        if arts.pulse_ir: write_json(art_dir / 'pulse_ir.json', public_value(arts.pulse_ir))
-        if arts.executable_model: write_json(art_dir / 'executable_model.json', public_value(arts.executable_model))
-        if arts.model_spec: write_json(art_dir / 'model_spec.json', public_value(arts.model_spec))
-        if arts.decoder_outputs: write_json(art_dir / 'decoder_outputs.json', public_value(arts.decoder_outputs))
-        write_json(art_dir / 'timings.json', public_value(arts.timings))
+    for solver_id, studies in model.runs.items():
+        for run_id, run_obj in studies.items():
+            run_root = runs_dir / run_id
+            run_root.mkdir(parents=True, exist_ok=True)
+            
+            # Identity & Task
+            write_json(run_root / 'identity.json', public_value(run_obj.identity))
+            write_json(run_root / 'runtime_task.json', public_value(run_obj.runtime_task))
+            
+            # Artifacts
+            art_dir = run_root / 'artifacts'
+            art_dir.mkdir(parents=True, exist_ok=True)
+            arts = run_obj.artifacts
+            if arts.compile_report: write_json(art_dir / 'compile_report.json', public_value(arts.compile_report))
+            if arts.pulse_ir: write_json(art_dir / 'pulse_ir.json', public_value(arts.pulse_ir))
+            if arts.executable_model: write_json(art_dir / 'executable_model.json', public_value(arts.executable_model))
+            # model_spec is removed to avoid redundant duplication per run
+            if arts.decoder_outputs: write_json(art_dir / 'decoder_outputs.json', public_value(arts.decoder_outputs))
+            write_json(art_dir / 'timings.json', public_value(arts.timings))
 
-        # Result
-        res_dir = run_root / 'result'
-        res_dir.mkdir(parents=True, exist_ok=True)
-        if run_obj.result:
-            write_json(res_dir / 'provenance.json', public_value(run_obj.result.provenance))
-            write_json(res_dir / 'runtime_metadata.json', public_value(run_obj.result.runtime_metadata))
-            if run_obj.result.trajectory:
-                write_trajectory_h5(run_obj.result.trajectory, res_dir / 'trajectory.h5')
+        # Results
+        results_dir = run_root / 'results'
+        results_dir.mkdir(parents=True, exist_ok=True)
+        for param_id, run_result in sorted(dict(run_obj.results or {}).items()):
+            result_root = results_dir / str(param_id)
+            result_root.mkdir(parents=True, exist_ok=True)
+            write_json(result_root / 'result.json', public_value(run_result))
+            traj_dir = result_root / 'trajectories'
+            traj_dir.mkdir(parents=True, exist_ok=True)
+            for shot_id, trajectory in sorted(dict(run_result.trajectories or {}).items()):
+                write_trajectory_h5(trajectory, traj_dir / f'{shot_id}.h5')
 
     # 3. Analyses Layer
     analyses_dir = out / 'analyses'
@@ -451,17 +461,17 @@ def load_model(model_class: Any, create_model_func: Any, path: str | Path) -> An
     # Use .resolve() to ensure absolute paths, avoiding issues with relative path resolution
     config_meta_path = root / cfg_manifest.get('config_meta', 'config/config.json')
     create_kwargs = {
-        'solver_config': {sid: (root / rel).resolve() for sid, rel in dict(cfg_manifest.get('solvers', {}) or {}).items()},
-        'device_config': {
+        'solvers': {sid: (root / rel).resolve() for sid, rel in dict(cfg_manifest.get('solvers', {}) or {}).items()},
+        'devices': {
             did: (root / rel).resolve()
             for did, rel in dict(cfg_manifest.get('devices', {}) or {'default': 'config/device.json'}).items()
         },
-        'pulse_config': {
+        'pulses': {
             pid: (root / rel).resolve()
             for pid, rel in dict(cfg_manifest.get('pulses', {}) or {'default': 'config/pulse.json'}).items()
         },
-        'analyser_config': {aid: (root / rel).resolve() for aid, rel in dict(cfg_manifest.get('analysers', {}) or {}).items()},
-        'circuit_config': {
+        'analysers': {aid: (root / rel).resolve() for aid, rel in dict(cfg_manifest.get('analysers', {}) or {}).items()},
+        'circuits': {
             cid: (root / rel).resolve()
             for cid, rel in dict(cfg_manifest.get('circuits', {}) or {'default': 'config/circuit.json'}).items()
         },
@@ -511,29 +521,40 @@ def load_model(model_class: Any, create_model_func: Any, path: str | Path) -> An
                 if (art_dir / 'timings.json').exists():
                     artifacts.timings = read_json(art_dir / 'timings.json')
             
-            # Result
-            res_dir = run_root / 'result'
-            result = None
-            if res_dir.exists():
-                traj_path = res_dir / 'trajectory.h5'
-                trajectory = load_trajectory_h5(traj_path) if traj_path.exists() else None
-                if trajectory:
-                    provenance_payload = read_json(res_dir / 'provenance.json')
-                    provenance = RunProvenance(**provenance_payload)
-                    runtime_meta = read_json(res_dir / 'runtime_metadata.json') if (res_dir / 'runtime_metadata.json').exists() else {}
-                    result = RunResult(
-                        result_id=run_id,
-                        trajectory=trajectory,
-                        provenance=provenance,
-                        runtime_metadata=runtime_meta,
+            # Results
+            results: dict[str, RunResult] = {}
+            results_dir = run_root / 'results'
+            if results_dir.exists():
+                for result_root in sorted([p for p in results_dir.iterdir() if p.is_dir()]):
+                    result_payload = read_json(result_root / 'result.json')
+                    trajectories: dict[str, Any] = {}
+                    traj_dir = result_root / 'trajectories'
+                    if traj_dir.exists():
+                        for traj_path in sorted(traj_dir.glob('*.h5')):
+                            trajectories[traj_path.stem] = load_trajectory_h5(traj_path)
+                    params_payload = dict(result_payload.get('parameters', {}) or {})
+                    run_result = RunResult(
+                        result_id=str(result_payload.get('result_id', result_root.name)),
+                        parameters=ParameterValues(
+                            parameter_id=str(params_payload.get('parameter_id', result_root.name)),
+                            values=dict(params_payload.get('values', {}) or {}),
+                            metadata=dict(params_payload.get('metadata', {}) or {}),
+                        ),
+                        provenance=RunProvenance(**dict(result_payload.get('provenance', {}) or {})),
+                        trajectories=trajectories,
+                        runtime_metadata=dict(result_payload.get('runtime_metadata', {}) or {}),
                     )
+                    results[str(run_result.parameters.parameter_id)] = run_result
             
-            model.runs[run_id] = ModelRun(
+            solver_id = identity.solver_id
+            if solver_id not in model.runs:
+                model.runs[solver_id] = {}
+            model.runs[solver_id][run_id] = ModelRun(
                 identity=identity,
                 runtime_task=runtime_task,
                 artifacts=artifacts,
-                result=result,
-                status=RunStatus.COMPLETED if result is not None else RunStatus.PENDING,
+                results=results,
+                status=RunStatus.COMPLETED if results else RunStatus.PENDING,
             )
 
     # 4. Restore Analyses

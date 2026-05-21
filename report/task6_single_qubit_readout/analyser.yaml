@@ -1,0 +1,35 @@
+schema_version: "1.0"
+analysis:
+  # 第一层：物理还原与信号提取 (Per-Case)
+  # 职责：将原始信号还原，提取所有中间过程信号，供后续分析和调试绘图
+  - name: readout_analysis
+    level: CASE
+    metrics:
+      # --- 核心集成量 ---
+      - integrated_iq        # 每条 trajectory 的集成 IQ 坐标 (I, Q)
+      
+      # --- 诊断性衍生信号 (Derived Signals) ---
+      # 这些信号对分析读出链路的物理过程至关重要
+      - intracavity_field    # 腔内场演化
+      - outgoing_field       # 出射场信号
+      - complex_envelope     # 复包络信号
+      - rf_signal            # RF 实信号
+      - adc_signal           # ADC 数字化信号
+      
+      # --- 轨迹元数据 ---
+      - trajectory_id        # 轨迹标识
+
+  # 第二层：统计推断与分布分析 (Comprehensive)
+  # 职责：聚合所有 Case，分析 IQ 云团分布并计算判别指标
+  - name: iq_analysis
+    level: COMPREHENSIVE
+    metrics:
+      # --- 分布数据 (用于绘图) ---
+      - iq_clouds            # 包含所有状态的散点云数据 {state_label: [(I, Q), ...]}
+      - discrimination_line  # IQ 判决线/边界的数学定义 (例如: 斜率和截距)
+      
+      # --- 统计指标 ---
+      - centroids            # 各状态的质心坐标
+      - confusion_matrix     # 状态混淆矩阵
+      - readout_fidelity     # 最终读出保真度
+      - snr                  # 信号噪声比

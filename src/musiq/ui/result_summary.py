@@ -7,8 +7,15 @@ import json
 
 import numpy as np
 import pandas as pd
-from musiq.analysis.trajectory_semantics import state_channel_name, state_encoding, state_rows
+from musiq.analysis.common.trajectory_semantics import state_channel_name, state_encoding, state_rows
 from musiq.workflow.model import Model
+
+
+def _first_model_run(model: Model):
+    for solver_runs in model.runs.values():
+        for run_id, run_obj in solver_runs.items():
+            return run_id, run_obj
+    raise ValueError("summarize_workflow_result expects a model that has already produced results.")
 
 
 def _integrate_abs(y: np.ndarray, t: np.ndarray) -> float:
@@ -62,9 +69,9 @@ def summarize_workflow_result(
     """Build one flat summary row from a completed ``Model``."""
     if not model.runs:
         raise ValueError("summarize_workflow_result expects a model that has already produced results.")
-    run_id = sorted(model.runs.keys())[0]
-    bundle = model.runs[run_id]
-    trajectory = bundle.result.trajectory if bundle.result else None
+    run_id, bundle = _first_model_run(model)
+    result = next(iter(bundle.results.values()), None)
+    trajectory = next(iter(result.trajectories.values()), None) if result is not None else None
     assert trajectory is not None
     # Find the first analysis that depends on this run
     analysis = model.find_analysis_for_run(run_id)
@@ -73,7 +80,7 @@ def summarize_workflow_result(
         if analysis and analysis.output and analysis.output.metrics
         else {}
     )
-    runtime = dict(bundle.result.runtime_metadata if bundle.result else {})
+    runtime = dict(result.runtime_metadata if result is not None else {})
     model_spec = bundle.artifacts.model_spec if bundle.artifacts else None
 
     inferred_state_encoding = state_encoding(trajectory)

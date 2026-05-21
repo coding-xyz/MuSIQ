@@ -1,18 +1,19 @@
 schema_version: "1.0"
-trajectory:
-  quantum: density_matrix
-  save_times: all
-  save_final_state: true
-  save_jump_events: false
-  save_measurement_records: false
-case_metrics:
-  - population
-  - leakage
-  - coherence_01
-sweep_metrics:
-  - final_P0
-  - final_P1
-  - final_P2
-  - final_fidelity
-  - final_leakage
-  - final_coherence_01
+analysis:
+  # 第一层：Case 级分析 (提取每条轨迹的物理量)
+  - name: state_analysis
+    level: CASE
+    metrics:
+      - population      # 包含所有能级布居数
+      - leakage         # 泄漏概率
+      - coherence_01    # 0-1 相干项
+
+  # 第二层：参数级分析 (聚合为 sweep 曲线)
+  - name: rabi_sweep_analysis
+    level: PARAMETRIC
+    metrics:
+      - final_P0
+      - final_P1
+      - final_P2
+      - final_fidelity
+      - final_coherence_01

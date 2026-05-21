@@ -360,11 +360,11 @@ def test_create_model_accepts_direct_resource_configs(tmp_path: Path):
     circuit_path.write_text(json.dumps(circuit_cfg, ensure_ascii=False), encoding="utf-8")
 
     model = create_model(
-        circuit_config=circuit_path,
-        solver_config=solver_path,
-        device_config=device_path,
-        pulse_config=pulse_path,
-        analyser_config=analyser_path,
+        circuits=circuit_path,
+        solvers=solver_path,
+        devices=device_path,
+        pulses=pulse_path,
+        analysers=analyser_path,
     )
     model.run()
     assert "default" in model.config.circuits
@@ -372,8 +372,9 @@ def test_create_model_accepts_direct_resource_configs(tmp_path: Path):
     assert "default" in model.config.pulses
     assert "solver_0" in model.config.solvers
     assert "analyser_0" in model.config.analysers
+    assert sorted(model.config.profiles.keys()) == ["default"]
     assert model.config.profiles["default"].solver_id == "solver_0"
-    assert "run_0" in model.runs
+    assert "solver_0" in model.runs
     assert model.out_dir is not None
 
 
@@ -388,11 +389,11 @@ def test_create_model_accepts_named_resource_dicts(tmp_path: Path):
     circuit_b.write_text(json.dumps({"qasm_path": "task_b.qasm"}), encoding="utf-8")
 
     model = create_model(
-        circuit_config={"ground": circuit_a, "excited": circuit_b},
-        solver_config={"solver_main": solver_path},
-        device_config={"device_main": device_path},
-        pulse_config={"pulse_main": pulse_path},
-        analyser_config={"analyser_main": analyser_path},
+        circuits={"ground": circuit_a, "excited": circuit_b},
+        solvers={"solver_main": solver_path},
+        devices={"device_main": device_path},
+        pulses={"pulse_main": pulse_path},
+        analysers={"analyser_main": analyser_path},
     )
 
     assert sorted(model.config.circuits.keys()) == ["excited", "ground"]
@@ -414,11 +415,11 @@ def test_save_and_load_model_round_trips_profiles_and_resource_pools(tmp_path: P
     circuit_b.write_text(json.dumps({"qasm_path": "task_b.qasm"}), encoding="utf-8")
 
     model = create_model(
-        circuit_config={"ground": circuit_a, "excited": circuit_b},
-        solver_config={"solver_0": solver_path},
-        device_config={"device_a": device_path},
-        pulse_config={"pulse_a": pulse_path},
-        analyser_config={"analyser_0": analyser_path},
+        circuits={"ground": circuit_a, "excited": circuit_b},
+        solvers={"solver_0": solver_path},
+        devices={"device_a": device_path},
+        pulses={"pulse_a": pulse_path},
+        analysers={"analyser_0": analyser_path},
     )
     model.config.profiles = {
         "ground_profile": ProfileConfig(
