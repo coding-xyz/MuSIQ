@@ -12,3 +12,4 @@ agent_config/
 pytest_*
 tmp*
 *tmp*
+small_circuits/

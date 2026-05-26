@@ -13,7 +13,11 @@
 
 ## In Progress
 
+- [COMPILER-P1_typed-pulse-recipe-and-parallel-circuit-ir-refactor.md](./COMPILER-P1_typed-pulse-recipe-and-parallel-circuit-ir-refactor.md)
+
 ## Done
+
+- [ANALYSIS-P1_hierarchical-analysis-architecture-refactor.md](./done/ANALYSIS-P1_hierarchical-analysis-architecture-refactor.md)
 
 ## Template
 

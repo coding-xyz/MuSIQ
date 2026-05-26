@@ -59,6 +59,9 @@ class SystemConnectionSpec:
         data = {"id": self.id, "type": self.type, "a": self.a, "b": self.b, "parameters": _connection_parameters_dict(self)}
         if self.via:
             data["via"] = self.via
+        noise = _connection_noise_dict(self)
+        if noise:
+            data["noise"] = noise
         return data
 
 
@@ -127,15 +130,19 @@ class ZZConnectionSpec(SystemConnectionSpec):
         type: Connection type. Defaults to "zz".
         i: Index of the first qubit. Defaults to 0.
         j: Index of the second qubit. Defaults to 1.
-        g_Hz: Coupling strength in Hz. Defaults to 0.0.
-        g_rad_s: Coupling strength in rad/s. Defaults to 0.0.
+        max_effective_coupling_Hz: Maximum gate-time effective coupling in Hz.
+        max_effective_coupling_rad_s: Maximum gate-time effective coupling in rad/s.
+        residual_zz_Hz: Residual static ZZ coupling in Hz.
+        residual_zz_rad_s: Residual static ZZ coupling in rad/s.
     """
 
     type: str = "zz"
     i: int = 0
     j: int = 1
-    g_Hz: float = 0.0
-    g_rad_s: float = 0.0
+    max_effective_coupling_Hz: float = 0.0
+    max_effective_coupling_rad_s: float = 0.0
+    residual_zz_Hz: float = 0.0
+    residual_zz_rad_s: float = 0.0
 
 
 def _connection_parameters_dict(connection: SystemConnectionSpec) -> dict[str, Any]:
@@ -166,7 +173,23 @@ def _connection_parameters_dict(connection: SystemConnectionSpec) -> dict[str, A
             data["input_output"] = input_output
         return data
     if isinstance(connection, ZZConnectionSpec):
-        return {"g_Hz": connection.g_Hz}
+        data: dict[str, Any] = {}
+        if connection.max_effective_coupling_Hz != 0.0:
+            data["max_effective_coupling_Hz"] = connection.max_effective_coupling_Hz
+        if connection.max_effective_coupling_rad_s != 0.0:
+            data["max_effective_coupling_rad_s"] = connection.max_effective_coupling_rad_s
+        return data
+    return {}
+
+
+def _connection_noise_dict(connection: SystemConnectionSpec) -> dict[str, Any]:
+    if isinstance(connection, ZZConnectionSpec):
+        data: dict[str, Any] = {}
+        if connection.residual_zz_Hz != 0.0:
+            data["residual_zz_Hz"] = connection.residual_zz_Hz
+        if connection.residual_zz_rad_s != 0.0:
+            data["residual_zz_rad_s"] = connection.residual_zz_rad_s
+        return data
     return {}
 
 
@@ -255,8 +278,10 @@ def _build_zz_connection(raw: dict[str, Any]) -> ZZConnectionSpec:
         **_base_connection_kwargs(raw),
         i=_int(data, "i", 0),
         j=_int(data, "j", 1),
-        g_Hz=_float(data, "g_Hz"),
-        g_rad_s=_float(data, "g_rad_s"),
+        max_effective_coupling_Hz=_float(data, "max_effective_coupling_Hz"),
+        max_effective_coupling_rad_s=_float(data, "max_effective_coupling_rad_s"),
+        residual_zz_Hz=_float(data.get("_noise", {}), "residual_zz_Hz"),
+        residual_zz_rad_s=_float(data.get("_noise", {}), "residual_zz_rad_s"),
     )
 
 

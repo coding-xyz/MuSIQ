@@ -1,54 +1,39 @@
 schema_version: "3.0"
 pulse:
-  channels:
-    - name: RO_r0
-      kind: readout_drive
-      target: r0
-      port: ro_in
-    - name: LO_r0
-      kind: readout_lo
-      target: ro0
-      port: line_in
-
-  carriers:
-    RO_r0:
-      freq_Hz: 6.450e9
-      phase_rad: 0.0
-    LO_r0:
-      freq_Hz: 5.800e9
-      phase_rad: -1.5707963267948966
-
-  waveforms:
-    readout_kick:
-      shape: readout
-      duration_ns: 40.0
-      rise_ns: 10.0
-      fall_ns: 0.0
-    readout_hold:
-      shape: readout
-      duration_ns: 180.0
-      rise_ns: 0.0
-      fall_ns: 10.0
-
-  operations:
+  defaults:
+    xy_carrier_freq_Hz: 5.0e9
+    ro_carrier_freq_Hz: 6.450e9
+    schedule_policy: serial
+  gates:
+    x:
+      recipe_type: x
+      shape: rect
+      duration_ns: 20.0
+      amplitude_Hz: 12.5e6
+      carrier_freq_Hz: 5.0e9
+      edge_ns: 0.0
     measure:
-      - channel: RO_r0
-        waveform: readout_kick
-        scale: 0.0625
-      - channel: RO_r0
-        waveform: readout_hold
-        scale: 0.01875
-
-  schedule:
-    policy: serial
-
+      recipe_type: measure
+      carrier_freq_Hz: 6.450e9
+      segments:
+        - shape: readout
+          duration_ns: 40.0
+          amplitude: 0.0625
+          rise_ns: 10.0
+          fall_ns: 0.0
+        - shape: readout
+          duration_ns: 180.0
+          amplitude: 0.01875
+          rise_ns: 0.0
+          fall_ns: 10.0
+    virtual_z:
+      recipe_type: virtual_z
   acquisition:
     mode: heterodyne
     measure_start_delay_ns: 20.0
     integration_window_ns: 160.0
     start_delay_ns: 28.0
     demodulation:
-      lo_channel: LO_r0
       if_Hz: 650.0e6
       phase_rad: 0.0
     iq_discrimination:

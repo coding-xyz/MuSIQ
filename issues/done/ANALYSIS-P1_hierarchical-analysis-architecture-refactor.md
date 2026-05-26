@@ -1,9 +1,9 @@
 # [ANALYSIS-P1] Refactor Analysis Architecture into Level/Kind Hierarchy
 
 ## 0. Status
-- Status: In Progress
+- Status: Done
 - Owner: Unassigned
-- Updated: 2026-05-21
+- Updated: 2026-05-25
 
 ## 1. Background and Goals
 - Background:
@@ -73,55 +73,55 @@
 
 ```text
 src/musiq/analysis/
-├── __init__.py
-├── base.py                    # base abstractions for analysis levels/kinds
-├── registry.py                # level+kind registry / dispatch
-├── common/
-│   ├── __init__.py
-│   ├── state_utils.py
-│   ├── trajectory_semantics.py
-│   └── observables.py
-├── case/
-│   ├── __init__.py
-│   ├── single_qubit/
-│   │   ├── __init__.py
-│   │   ├── analysis.py        # CASE.SingleQubit
-│   │   └── metrics.py         # population / coherence / leakage / ...
-│   ├── multi_qubit/
-│   │   ├── __init__.py
-│   │   ├── analysis.py        # CASE.MultiQubit
-│   │   └── metrics.py
-│   └── readout/
-│       ├── __init__.py
-│       ├── analysis.py        # CASE.Readout
-│       ├── metrics.py         # integrated_iq / rf_signal / adc_signal / ...
-│       └── signals.py         # physical reconstruction helpers
-├── parametric/
-│   ├── __init__.py
-│   ├── single_qubit/
-│   │   ├── __init__.py
-│   │   ├── analysis.py        # PARAMETRIC.SingleQubit
-│   │   └── metrics.py         # final_P0 / final_P1 / final_fidelity / ...
-│   ├── multi_qubit/
-│   │   ├── __init__.py
-│   │   ├── analysis.py
-│   │   └── metrics.py
-│   └── readout/
-│       ├── __init__.py
-│       ├── analysis.py
-│       └── metrics.py
-├── comprehensive/
-│   ├── __init__.py
-│   ├── iq/
-│   │   ├── __init__.py
-│   │   ├── analysis.py        # COMPREHENSIVE.IQ
-│   │   └── metrics.py         # centroids / confusion_matrix / snr / ...
-│   └── cross/
-│       ├── __init__.py
-│       └── analysis.py
-└── legacy/
-    ├── __init__.py
-    └── compatibility.py       # old names/fields -> canonical level+kind
+鈹溾攢鈹€ __init__.py
+鈹溾攢鈹€ base.py                    # base abstractions for analysis levels/kinds
+鈹溾攢鈹€ registry.py                # level+kind registry / dispatch
+鈹溾攢鈹€ common/
+鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹溾攢鈹€ state_utils.py
+鈹?  鈹溾攢鈹€ trajectory_semantics.py
+鈹?  鈹斺攢鈹€ observables.py
+鈹溾攢鈹€ case/
+鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹溾攢鈹€ single_qubit/
+鈹?  鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹?  鈹溾攢鈹€ analysis.py        # CASE.SingleQubit
+鈹?  鈹?  鈹斺攢鈹€ metrics.py         # population / coherence / leakage / ...
+鈹?  鈹溾攢鈹€ multi_qubit/
+鈹?  鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹?  鈹溾攢鈹€ analysis.py        # CASE.MultiQubit
+鈹?  鈹?  鈹斺攢鈹€ metrics.py
+鈹?  鈹斺攢鈹€ readout/
+鈹?      鈹溾攢鈹€ __init__.py
+鈹?      鈹溾攢鈹€ analysis.py        # CASE.Readout
+鈹?      鈹溾攢鈹€ metrics.py         # integrated_iq / rf_signal / adc_signal / ...
+鈹?      鈹斺攢鈹€ signals.py         # physical reconstruction helpers
+鈹溾攢鈹€ parametric/
+鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹溾攢鈹€ single_qubit/
+鈹?  鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹?  鈹溾攢鈹€ analysis.py        # PARAMETRIC.SingleQubit
+鈹?  鈹?  鈹斺攢鈹€ metrics.py         # final_P0 / final_P1 / final_fidelity / ...
+鈹?  鈹溾攢鈹€ multi_qubit/
+鈹?  鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹?  鈹溾攢鈹€ analysis.py
+鈹?  鈹?  鈹斺攢鈹€ metrics.py
+鈹?  鈹斺攢鈹€ readout/
+鈹?      鈹溾攢鈹€ __init__.py
+鈹?      鈹溾攢鈹€ analysis.py
+鈹?      鈹斺攢鈹€ metrics.py
+鈹溾攢鈹€ comprehensive/
+鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹溾攢鈹€ iq/
+鈹?  鈹?  鈹溾攢鈹€ __init__.py
+鈹?  鈹?  鈹溾攢鈹€ analysis.py        # COMPREHENSIVE.IQ
+鈹?  鈹?  鈹斺攢鈹€ metrics.py         # centroids / confusion_matrix / snr / ...
+鈹?  鈹斺攢鈹€ cross/
+鈹?      鈹溾攢鈹€ __init__.py
+鈹?      鈹斺攢鈹€ analysis.py
+鈹斺攢鈹€ legacy/
+    鈹溾攢鈹€ __init__.py
+    鈹斺攢鈹€ compatibility.py       # old names/fields -> canonical level+kind
 ```
 
   - Small filename differences are acceptable, but the final result must preserve the same architectural separation:
@@ -135,35 +135,35 @@ src/musiq/analysis/
 
 ```text
 model.analyses
-├── case
-│   ├── <analysis_id>
-│   │   ├── level = CASE
-│   │   ├── kind = SingleQubit | MultiQubit | Readout | ...
-│   │   ├── input_results = [ResultRef, ...]
-│   │   └── output = CaseAnalysisOutput
-│   │       ├── metrics = {...}
-│   │       ├── signals = {...}          # when applicable
-│   │       ├── fit = {...}              # when applicable
-│   │       └── payload = typed domain payload
-├── parametric
-│   ├── <analysis_id>
-│   │   ├── level = PARAMETRIC
-│   │   ├── kind = SingleQubit | MultiQubit | Readout | ...
-│   │   ├── input_results = [ResultRef, ...]
-│   │   └── output = ParametricAnalysisOutput
-│   │       ├── axes = {...}
-│   │       ├── metrics = {...}
-│   │       ├── curves = {...}
-│   │       └── payload = typed domain payload
-└── comprehensive
-    ├── <analysis_id>
-    │   ├── level = COMPREHENSIVE
-    │   ├── kind = IQ | CrossStudy | ...
-    │   ├── input_results = [ResultRef, ...]
-    │   └── output = ComprehensiveAnalysisOutput
-    │       ├── metrics = {...}
-    │       ├── summary = {...}
-    │       └── payload = typed domain payload
+鈹溾攢鈹€ case
+鈹?  鈹溾攢鈹€ <analysis_id>
+鈹?  鈹?  鈹溾攢鈹€ level = CASE
+鈹?  鈹?  鈹溾攢鈹€ kind = SingleQubit | MultiQubit | Readout | ...
+鈹?  鈹?  鈹溾攢鈹€ input_results = [ResultRef, ...]
+鈹?  鈹?  鈹斺攢鈹€ output = CaseAnalysisOutput
+鈹?  鈹?      鈹溾攢鈹€ metrics = {...}
+鈹?  鈹?      鈹溾攢鈹€ signals = {...}          # when applicable
+鈹?  鈹?      鈹溾攢鈹€ fit = {...}              # when applicable
+鈹?  鈹?      鈹斺攢鈹€ payload = typed domain payload
+鈹溾攢鈹€ parametric
+鈹?  鈹溾攢鈹€ <analysis_id>
+鈹?  鈹?  鈹溾攢鈹€ level = PARAMETRIC
+鈹?  鈹?  鈹溾攢鈹€ kind = SingleQubit | MultiQubit | Readout | ...
+鈹?  鈹?  鈹溾攢鈹€ input_results = [ResultRef, ...]
+鈹?  鈹?  鈹斺攢鈹€ output = ParametricAnalysisOutput
+鈹?  鈹?      鈹溾攢鈹€ axes = {...}
+鈹?  鈹?      鈹溾攢鈹€ metrics = {...}
+鈹?  鈹?      鈹溾攢鈹€ curves = {...}
+鈹?  鈹?      鈹斺攢鈹€ payload = typed domain payload
+鈹斺攢鈹€ comprehensive
+    鈹溾攢鈹€ <analysis_id>
+    鈹?  鈹溾攢鈹€ level = COMPREHENSIVE
+    鈹?  鈹溾攢鈹€ kind = IQ | CrossStudy | ...
+    鈹?  鈹溾攢鈹€ input_results = [ResultRef, ...]
+    鈹?  鈹斺攢鈹€ output = ComprehensiveAnalysisOutput
+    鈹?      鈹溾攢鈹€ metrics = {...}
+    鈹?      鈹溾攢鈹€ summary = {...}
+    鈹?      鈹斺攢鈹€ payload = typed domain payload
 ```
 
   - In schema terms, the target runtime/persistence model should make these fields explicit on every analysis object:

@@ -316,6 +316,9 @@ def reorder_xy_z_channels(pulse_ir: PulseIR) -> PulseIR:
 
     def _rest_group(name: str) -> tuple[int, int, str]:
         up = name.upper()
+        m_tc_pair = re.match(r"^TC_Q(\d+)_Q(\d+)$", up)
+        if m_tc_pair:
+            return (0, int(m_tc_pair.group(1)) * 1000 + int(m_tc_pair.group(2)), "")
         m_tc = re.match(r"^TC_?(\d+)$", up)
         if m_tc:
             return (0, int(m_tc.group(1)), "")
@@ -330,7 +333,7 @@ def reorder_xy_z_channels(pulse_ir: PulseIR) -> PulseIR:
 
 
 def canonicalize_channel_names(pulse_ir: PulseIR) -> PulseIR:
-    """Normalize channel naming to `XY_i`, `Z_i`, `RO_i`, and `TC_i` forms.
+    """Normalize channel naming to `XY_i`, `Z_i`, `RO_i`, and `TC_*` forms.
 
     This helper keeps pulse content unchanged and only rewrites channel names
     to a consistent underscore style expected by timing plots.
@@ -339,6 +342,9 @@ def canonicalize_channel_names(pulse_ir: PulseIR) -> PulseIR:
     for ch in pulse_ir.channels:
         name = ch.name
         up = name.upper()
+        m_pair = re.match(r"^(TC)_Q?(\d+)_Q?(\d+)$", up)
+        if m_pair:
+            name = f"{m_pair.group(1)}_q{int(m_pair.group(2))}_q{int(m_pair.group(3))}"
         m = re.match(r"^(XY|Z|RO|TC)_?(\d+)$", up)
         if m:
             name = f"{m.group(1)}_{int(m.group(2))}"

@@ -6,13 +6,15 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any
 
 from musiq.common.schemas import BackendConfig
+from musiq.schemas.circuit import CircuitIR
 
 
 @dataclass(slots=True)
 class WorkflowInput:
     """Merged runtime input payload used by pipeline stages."""
 
-    qasm_text: str
+    qasm_text: str | None = None
+    circuit_ir: CircuitIR | None = None
     backend_path: str | None = None
     backend_config: BackendConfig | None = None
     device: dict[str, Any] | None = None
@@ -129,7 +131,8 @@ class Task:
 class CircuitConfig:
     """Static circuit input definition."""
 
-    qasm_text: str
+    qasm_text: str | None = None
+    circuit_ir: CircuitIR | None = None
     param_bindings: dict[str, float] | None = None
 
 
@@ -634,11 +637,13 @@ def _normalize_composite_device_payload(raw: dict[str, object]) -> dict[str, obj
             if i is None or j is None or i == j:
                 continue
             kind = "zz" if conn_type == "zz" else "xx+yy"
+            raw_noise = conn.get("noise", {}) or {}
+            local_noise = dict(raw_noise) if isinstance(raw_noise, dict) else {}
             couplings.append(
                 {
                     "i": int(i),
                     "j": int(j),
-                    "g_Hz": float(params.get("g_Hz", 0.0)),
+                    "g_Hz": float(local_noise.get("residual_zz_Hz", 0.0) if conn_type == "zz" else params.get("g_Hz", 0.0)),
                     "kind": kind,
                 }
             )
@@ -786,6 +791,7 @@ def compose_workflow_task(
     return Task(
         input=WorkflowInput(
             qasm_text=circuit_cfg.qasm_text,
+            circuit_ir=circuit_cfg.circuit_ir,
             backend_path=backend_source,
             backend_config=solver_cfg.to_backend_config(noise=device_cfg.noise, runtime_level=runtime_level),
             device=runtime_device,

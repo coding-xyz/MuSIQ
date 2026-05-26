@@ -98,6 +98,7 @@ class ConnectionConfig:
     b: str = ""
     via: str = ""
     parameters: dict[str, Any] = field(default_factory=dict)
+    noise: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -108,6 +109,8 @@ class ConnectionConfig:
         data.update({"id": self.id, "type": self.type, "a": self.a, "b": self.b, "parameters": dict(self.parameters)})
         if self.via:
             data["via"] = self.via
+        if self.noise:
+            data["noise"] = dict(self.noise)
         return data
 
 
@@ -424,6 +427,7 @@ def _normalize_connection(raw: dict[str, Any]) -> ConnectionConfig:
         b=str(data.get("b", "")),
         via=str(data.get("via", "")),
         parameters=dict(data.get("parameters", {}) or {}),
+        noise=dict(data.get("noise", {}) or {}),
         raw=data,
     )
 

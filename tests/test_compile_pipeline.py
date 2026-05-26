@@ -2,24 +2,32 @@ import json
 
 from musiq.backend.compile_pipeline import CompilePipeline
 from musiq.common.schemas import BackendConfig, CircuitGate, CircuitIR
+from musiq.schemas.circuit import build_serial_schedule
 
 
 class AppendBarrierPass:
     def run(self, circuit: CircuitIR, ctx: dict) -> CircuitIR:
         assert ctx["config"].solver == "me"
         assert ctx["hardware"] == {"schedule_policy": "serial"}
+        gates = [*circuit.gates, CircuitGate(name="barrier", qubits=[])]
         return CircuitIR(
             schema_version=circuit.schema_version,
             format=circuit.format,
             num_qubits=circuit.num_qubits,
             num_clbits=circuit.num_clbits,
-            gates=[*circuit.gates, CircuitGate(name="barrier", qubits=[])],
+            schedule=build_serial_schedule(gates, num_qubits=circuit.num_qubits),
             source_qasm=circuit.source_qasm,
         )
 
 
 def test_compile_pipeline_default_run_normalizes_and_reports():
-    circuit = CircuitIR(gates=[CircuitGate(name="H", qubits=[0]), CircuitGate(name="RZ", qubits=[0], params=[0.25])])
+    circuit = CircuitIR(
+        num_qubits=1,
+        schedule=build_serial_schedule(
+            [CircuitGate(name="H", qubits=[0]), CircuitGate(name="RZ", qubits=[0], params=[0.25])],
+            num_qubits=1,
+        ),
+    )
     config = BackendConfig(solver="se")
 
     normalized, report = CompilePipeline().run(circuit, config)
@@ -32,7 +40,7 @@ def test_compile_pipeline_default_run_normalizes_and_reports():
 
 
 def test_compile_pipeline_supports_custom_passes():
-    circuit = CircuitIR(gates=[CircuitGate(name="x", qubits=[0])])
+    circuit = CircuitIR(num_qubits=1, schedule=build_serial_schedule([CircuitGate(name="x", qubits=[0])], num_qubits=1))
     config = BackendConfig(solver="me")
     pipeline = CompilePipeline(passes=[AppendBarrierPass()])
 

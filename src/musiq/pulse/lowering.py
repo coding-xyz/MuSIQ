@@ -62,56 +62,69 @@ class DefaultPulseLowering:
         reset_events: list[dict] = []
         virtual_z_phase_by_qubit: dict[int, float] = defaultdict(float)
         scheduled_gates = build_gate_schedule(schedule_or_circuit, resolved_hw)
+        scheduled_by_tick: dict[int, list[dict]] = defaultdict(list)
+        for item in scheduled_gates:
+            scheduled_by_tick[int(item.get("tick", 0))].append(item)
         schedule_debug: list[dict] = []
         t_end = 0.0
-        for item in scheduled_gates:
-            gate = item["gate"]
-            gate_name = str(gate.name).lower()
-            gate_qubits = [int(q) for q in gate.qubits]
-            phase_before = {q: float(virtual_z_phase_by_qubit[q]) for q in gate_qubits}
-            pulses, duration, events = instantiate_operation_recipe(
-                gate.name,
-                gate.qubits,
-                gate_params=gate.params,
-                start_ns=float(item["start_ns"]),
-                hw=resolved_hw,
-                tc_index=item["tc_index"],
-                reset_feedback_offset_ns=float(item.get("reset_feedback_offset_ns", 0.0)),
+        for tick in sorted(scheduled_by_tick):
+            tick_items = sorted(
+                list(scheduled_by_tick[tick] or []),
+                key=lambda item: (
+                    float(item.get("start_ns", 0.0)),
+                    int(item.get("layer_id", 0)),
+                    int(item.get("index", 0)),
+                ),
             )
-            self._apply_virtual_z_phase(pulses, phase_before)
-            for channel, pulse in pulses:
-                ch_map[channel].append(pulse)
-            reset_events.extend(events)
-            if gate_name == "h":
-                for q in gate_qubits:
-                    virtual_z_phase_by_qubit[q] = float(virtual_z_phase_by_qubit[q]) + math.pi
-            elif gate_name == "z":
-                for q in gate_qubits:
-                    virtual_z_phase_by_qubit[q] = float(virtual_z_phase_by_qubit[q]) + math.pi
-            elif gate_name == "rz":
-                phase_delta = float(list(gate.params or [0.0])[0])
-                for q in gate_qubits:
-                    virtual_z_phase_by_qubit[q] = float(virtual_z_phase_by_qubit[q]) + phase_delta
-            phase_after = {q: float(virtual_z_phase_by_qubit[q]) for q in gate_qubits}
-            t_end = max(t_end, float(item["start_ns"]) + float(duration))
-            schedule_debug.append(
-                {
-                    "gate_index": int(item["index"]),
-                    "gate_name": str(gate.name),
-                    "qubits": [int(q) for q in gate.qubits],
-                    "family": str(item["family"]),
-                    "layer_id": int(item.get("layer_id", 0)),
-                    "start_ns": float(item["start_ns"]),
-                    "end_ns": float(item["end_ns"]),
-                    "duration_ns": float(duration),
-                    "tc_index": None if item["tc_index"] is None else int(item["tc_index"]),
-                    "blocked_by_resources": list(item.get("blocked_by_resources", [])),
-                    "reset_feedback_mode": item.get("reset_feedback_mode"),
-                    "reset_feedback_offset_ns": float(item.get("reset_feedback_offset_ns", 0.0)),
-                    "virtual_z_phase_before_rad": phase_before,
-                    "virtual_z_phase_after_rad": phase_after,
-                }
-            )
+            for item in tick_items:
+                gate = item["gate"]
+                gate_name = str(gate.name).lower()
+                gate_qubits = [int(q) for q in gate.qubits]
+                phase_before = {q: float(virtual_z_phase_by_qubit[q]) for q in gate_qubits}
+                pulses, duration, events = instantiate_operation_recipe(
+                    gate.name,
+                    gate.qubits,
+                    gate_params=gate.params,
+                    start_ns=float(item["start_ns"]),
+                    hw=resolved_hw,
+                    tc_channel=item.get("tc_channel"),
+                    reset_feedback_offset_ns=float(item.get("reset_feedback_offset_ns", 0.0)),
+                )
+                self._apply_virtual_z_phase(pulses, phase_before)
+                for channel, pulse in pulses:
+                    ch_map[channel].append(pulse)
+                reset_events.extend(events)
+                if gate_name == "h":
+                    for q in gate_qubits:
+                        virtual_z_phase_by_qubit[q] = float(virtual_z_phase_by_qubit[q]) + math.pi
+                elif gate_name == "z":
+                    for q in gate_qubits:
+                        virtual_z_phase_by_qubit[q] = float(virtual_z_phase_by_qubit[q]) + math.pi
+                elif gate_name == "rz":
+                    phase_delta = float(list(gate.params or [0.0])[0])
+                    for q in gate_qubits:
+                        virtual_z_phase_by_qubit[q] = float(virtual_z_phase_by_qubit[q]) + phase_delta
+                phase_after = {q: float(virtual_z_phase_by_qubit[q]) for q in gate_qubits}
+                t_end = max(t_end, float(item["start_ns"]) + float(duration))
+                schedule_debug.append(
+                    {
+                        "tick": int(tick),
+                        "gate_index": int(item["index"]),
+                        "gate_name": str(gate.name),
+                        "qubits": [int(q) for q in gate.qubits],
+                        "family": str(item["family"]),
+                        "layer_id": int(item.get("layer_id", 0)),
+                        "start_ns": float(item["start_ns"]),
+                        "end_ns": float(item["end_ns"]),
+                        "duration_ns": float(duration),
+                        "tc_channel": item.get("tc_channel"),
+                        "blocked_by_resources": list(item.get("blocked_by_resources", [])),
+                        "reset_feedback_mode": item.get("reset_feedback_mode"),
+                        "reset_feedback_offset_ns": float(item.get("reset_feedback_offset_ns", 0.0)),
+                        "virtual_z_phase_before_rad": phase_before,
+                        "virtual_z_phase_after_rad": phase_after,
+                    }
+                )
 
         if not scheduled_gates and int(getattr(schedule_or_circuit, "num_qubits", 0) or 0) == 0:
             measure_start_delay_ns = float(resolved_hw.get("measure_start_delay_ns", 0.0) or 0.0)
@@ -120,7 +133,7 @@ class DefaultPulseLowering:
                 [0],
                 start_ns=measure_start_delay_ns,
                 hw=resolved_hw,
-                tc_index=None,
+                tc_channel=None,
                 reset_feedback_offset_ns=0.0,
             )
             for channel, pulse in pulses:
@@ -137,7 +150,7 @@ class DefaultPulseLowering:
                     "start_ns": measure_start_delay_ns,
                     "end_ns": measure_start_delay_ns + float(duration),
                     "duration_ns": float(duration),
-                    "tc_index": None,
+                    "tc_channel": None,
                     "blocked_by_resources": [],
                     "reset_feedback_mode": None,
                     "reset_feedback_offset_ns": 0.0,

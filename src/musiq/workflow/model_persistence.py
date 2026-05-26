@@ -353,7 +353,7 @@ def save_model(model: Any, path: str | Path | None = None) -> Path:
         ),
         'tags': list(model.config.tags or []),
         'profiles': public_value(model.config.profiles),
-        'parameter_list': public_value(model.config.parameter_list) if model.config.parameter_list is not None else None,
+        'parameter_sweep': public_value(model.config.parameter_sweep) if model.config.parameter_sweep is not None else None,
     }
     write_json(config_dir / 'config.json', config_meta_payload)
 
@@ -484,7 +484,7 @@ def load_model(model_class: Any, create_model_func: Any, path: str | Path) -> An
         model.config.features = WorkflowFeatureFlags(**dict(meta_payload.get('features', {}) or {}))
         model.config.tags = list(meta_payload.get('tags', model.config.tags) or [])
         model.config.profiles = _restore_profile_map(dict(meta_payload.get('profiles', {}) or {}))
-        model.config.parameter_list = _restore_parameter_sweep_config(dict(meta_payload.get('parameter_list', {}) or {}))
+        model.config.parameter_sweep = _restore_parameter_sweep_config(dict(meta_payload.get('parameter_sweep', {}) or {}))
     
     # 2. Restore State
     state_manifest = manifest.get('state', {})

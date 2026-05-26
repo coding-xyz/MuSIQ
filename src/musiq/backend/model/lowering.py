@@ -47,6 +47,7 @@ XY_RE = re.compile(r"^XY_(\d+)$", re.IGNORECASE)
 Z_RE = re.compile(r"^Z_(\d+)$", re.IGNORECASE)
 RO_RE = re.compile(r"^RO_(\d+)$", re.IGNORECASE)
 TC_RE = re.compile(r"^TC_(\d+)$", re.IGNORECASE)
+TC_PAIR_RE = re.compile(r"^TC_q(\d+)_q(\d+)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -576,6 +577,7 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
         mz = Z_RE.match(ch_name)
         mro = RO_RE.match(ch_name)
         mtc = TC_RE.match(ch_name)
+        mtc_pair = TC_PAIR_RE.match(ch_name)
         if mro:
             readout_controls.append(
                 _sampled_control_record(
@@ -590,11 +592,26 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
                 )
             )
             continue
-        if mtc:
-            pair_index = int(mtc.group(1))
-            coupling = raw_couplings[pair_index] if 0 <= pair_index < len(raw_couplings) else None
-            i = int(coupling.i) if coupling is not None else 0
-            j = int(coupling.j) if coupling is not None else 1
+        if mtc_pair:
+            i = int(mtc_pair.group(1))
+            j = int(mtc_pair.group(2))
+            pair_index = next(
+                (
+                    idx
+                    for idx, coupling in enumerate(raw_couplings)
+                    if {int(coupling.i), int(coupling.j)} == {i, j}
+                ),
+                -1,
+            )
+            coupling = next(
+                (
+                    coupling
+                    for coupling in raw_couplings
+                    if {int(coupling.i), int(coupling.j)} == {i, j}
+                ),
+                None,
+            )
+            coupling_params = dict(getattr(coupling, "parameters", {}) or {}) if coupling is not None else {}
             if 0 <= i < num_qubits and 0 <= j < num_qubits and i != j:
                 controls.append(
                     _sampled_control_record(
@@ -604,7 +621,32 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
                         times=times,
                         values=values,
                         scale=1.0,
-                        metadata={"pair_index": pair_index},
+                        metadata={
+                            "pair_index": pair_index,
+                            "max_effective_coupling_Hz": float(coupling_params.get("max_effective_coupling_Hz", 0.0) or 0.0),
+                        },
+                    )
+                )
+            continue
+        if mtc:
+            pair_index = int(mtc.group(1))
+            coupling = raw_couplings[pair_index] if 0 <= pair_index < len(raw_couplings) else None
+            i = int(coupling.i) if coupling is not None else 0
+            j = int(coupling.j) if coupling is not None else 1
+            coupling_params = dict(getattr(coupling, "parameters", {}) or {}) if coupling is not None else {}
+            if 0 <= i < num_qubits and 0 <= j < num_qubits and i != j:
+                controls.append(
+                    _sampled_control_record(
+                        channel=ch_name,
+                        axis="zz",
+                        target_pair=[i, j],
+                        times=times,
+                        values=values,
+                        scale=1.0,
+                        metadata={
+                            "pair_index": pair_index,
+                            "max_effective_coupling_Hz": float(coupling_params.get("max_effective_coupling_Hz", 0.0) or 0.0),
+                        },
                     )
                 )
             continue
@@ -805,6 +847,29 @@ def lower_couplings(hw: DeviceConfig, num_qubits: int) -> list[CouplingTermSpec]
                 coefficient_rad_s=TWO_PI * g_hz,
             )
         )
+    if not couplings:
+        transmon_ids = [comp.id.strip() for comp in hw.components if comp.type.strip().lower() == "transmon"]
+        qubit_index = {comp_id: idx for idx, comp_id in enumerate(transmon_ids)}
+        for conn in hw.connections:
+            if conn.type.strip().lower() != "zz":
+                continue
+            i = qubit_index.get(conn.a.strip())
+            j = qubit_index.get(conn.b.strip())
+            if i is None or j is None or i == j or i < 0 or j < 0 or i >= num_qubits or j >= num_qubits:
+                continue
+            residual_zz_hz = float(dict(conn.noise).get("residual_zz_Hz", 0.0) or 0.0)
+            couplings.append(
+                CouplingTermSpec(
+                    id=str(conn.id),
+                    kind="zz",
+                    i=int(i),
+                    j=int(j),
+                    a=str(conn.a),
+                    b=str(conn.b),
+                    coefficient_Hz=residual_zz_hz,
+                    coefficient_rad_s=TWO_PI * residual_zz_hz,
+                )
+            )
     return couplings
 
 

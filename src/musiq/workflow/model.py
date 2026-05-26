@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -57,7 +58,7 @@ class ModelConfig:
     solvers: dict[str, SolverConfig]
     analysers: dict[str, AnalyserConfig] = field(default_factory=dict)
     profiles: dict[str, ProfileConfig] = field(default_factory=dict)
-    parameter_list: ParameterSweepConfig | None = None
+    parameter_sweep: ParameterSweepConfig | None = None
     target: str | list[str] = "trajectory"
     features: WorkflowFeatureFlags = field(default_factory=WorkflowFeatureFlags)
     output: WorkflowOutputOptions = field(default_factory=WorkflowOutputOptions)
@@ -218,6 +219,21 @@ class Model:
     def save(self, path: str | Path | None = None) -> Path:
         """Persist the current model state to a directory."""
         return _save_model_impl(self, path)
+
+    def copy(self, *, include_results: bool = True) -> Model:
+        """Return a detached copy of this model.
+
+        When ``include_results`` is ``False``, only configuration and registry
+        state are copied; run results, analyses, and session state are reset.
+        """
+        return Model(
+            config=deepcopy(self.config),
+            state=deepcopy(self.state) if include_results else ModelState(),
+            registry=deepcopy(self.registry),
+            manifest=deepcopy(self.manifest) if include_results else ModelManifest(),
+            runs=deepcopy(self.runs) if include_results else {},
+            analyses=deepcopy(self.analyses) if include_results else {},
+        )
 
     def profile(self, profile_id: str) -> Profile:
         """Get a profile wrapper for the specified profile ID."""
@@ -478,7 +494,7 @@ def create_model(
     pulses: Any | None = None,
     analysers: Any | None | object = _UNSET,
     profiles: Any | None = None,
-    parameter_list: Any | None = None,
+    parameter_sweep: Any | None = None,
 ) -> Model:
     """Build a top-down editable model object from config files, dicts, or config objects."""
     target: str | list[str] = "trajectory"
@@ -542,7 +558,7 @@ def create_model(
         pulses_res = {"default": PulseConfig()}
 
     # Normalize parameter sweep config
-    param_sweep = load_config(parameter_list, "sweep") if parameter_list is not None else None
+    param_sweep = load_config(parameter_sweep, "sweep") if parameter_sweep is not None else None
 
     # Resolve profiles (Cartesian product by default, or restricted by user input)
     resolved_profiles = _resolve_profiles(
@@ -561,7 +577,7 @@ def create_model(
         solvers=solvers_res,
         analysers=analysers_res,
         profiles=resolved_profiles,
-        parameter_list=param_sweep,
+        parameter_sweep=param_sweep,
         target=target,
         features=features,
         output=output,

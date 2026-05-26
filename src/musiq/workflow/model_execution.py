@@ -68,6 +68,9 @@ def _looks_like_pulse_payload(value: Any) -> bool:
         "acquisition",
         "timing",
         "channels",
+        "defaults",
+        "gates",
+        "channel_overrides",
         "gate_duration_ns",
         "idle_duration_ns",
         "measure_duration_ns",
@@ -82,6 +85,33 @@ def _looks_like_pulse_payload(value: Any) -> bool:
 
 def _assign_config_value(target: Any, field_name: str, value: Any) -> None:
     if target is None:
+        return
+    if "." in field_name:
+        head, tail = field_name.split(".", 1)
+        if isinstance(target, dict):
+            child = target.get(head)
+            if child is None or not isinstance(child, dict):
+                child = {}
+                target[head] = child
+            _assign_config_value(child, tail, value)
+            return
+        if hasattr(target, head):
+            child = getattr(target, head)
+            if child is None:
+                child = {}
+                setattr(target, head, child)
+            _assign_config_value(child, tail, value)
+            return
+        extras = getattr(target, "extras", None)
+        if extras is None:
+            extras = {}
+            setattr(target, "extras", extras)
+        if isinstance(extras, dict):
+            child = extras.get(head)
+            if child is None:
+                child = {}
+                extras[head] = child
+            _assign_config_value(child, tail, value)
         return
     if isinstance(target, dict):
         target[field_name] = value
@@ -492,6 +522,7 @@ def execute_compilation_unit(
     started_at = time.perf_counter()
     parsed = parse_compile_lower_model(
         qasm_text=task.input.qasm_text,
+        circuit_ir=getattr(task.input, "circuit_ir", None),
         backend_path=task.input.backend_path,
         backend_config=task.input.backend_config,
         out=out,
@@ -599,6 +630,7 @@ def run_sample(
 
         parsed = parse_compile_lower_model(
             qasm_text=run_obj.runtime_task.input.qasm_text,
+            circuit_ir=getattr(run_obj.runtime_task.input, "circuit_ir", None),
             backend_path=run_obj.runtime_task.input.backend_path,
             backend_config=run_obj.runtime_task.input.backend_config,
             out=resolve_writable_out_dir(Path(run_obj.runtime_task.output.out_dir)),
@@ -874,7 +906,7 @@ def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: 
 
     # --- Parametric Analysis (Maintained from original) ---
     if study_name_val is None:
-        param_cfg = model.config.parameter_list
+        param_cfg = model.config.parameter_sweep
         has_sweep_def = param_cfg is not None and len(param_cfg.parameters) > 0
         if has_sweep_def:
             from musiq.workflow.contracts import build_effective_pulse_config

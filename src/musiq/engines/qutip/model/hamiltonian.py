@@ -34,6 +34,7 @@ def build_hamiltonian_system(engine, setup: QutipPlan) -> QutipSystem:
         x_ops = sx
         y_ops = sy
         z_ops = sz
+        zz_ops = e_ops
         lower_ops = sm
         raise_ops = [op.dag() for op in sm]
         H0 = 0 * sz[0]
@@ -45,6 +46,7 @@ def build_hamiltonian_system(engine, setup: QutipPlan) -> QutipSystem:
         x_ops = x
         y_ops = y
         z_ops = n
+        zz_ops = n
         lower_ops = a
         raise_ops = adag
         H0 = 0 * n[0]
@@ -67,6 +69,7 @@ def build_hamiltonian_system(engine, setup: QutipPlan) -> QutipSystem:
         x_ops = x_q
         y_ops = y_q
         z_ops = n_q
+        zz_ops = n_q
         lower_ops = a_q
         raise_ops = adag_q
         cavity_omega_rad_s = float(system_spec.cavity_omega_rad_s)
@@ -106,6 +109,7 @@ def build_hamiltonian_system(engine, setup: QutipPlan) -> QutipSystem:
         x_ops=x_ops,
         y_ops=y_ops,
         z_ops=z_ops,
+        zz_ops=zz_ops,
         lower_ops=lower_ops,
         raise_ops=raise_ops,
     )
@@ -120,6 +124,7 @@ def build_hamiltonian_system(engine, setup: QutipPlan) -> QutipSystem:
         x_ops=x_ops,
         y_ops=y_ops,
         z_ops=z_ops,
+        zz_ops=zz_ops,
     )
     hybrid_arg_store = _append_readout_drive_terms(
         engine=engine,
@@ -154,6 +159,7 @@ def _append_static_couplings(
     x_ops,
     y_ops,
     z_ops,
+    zz_ops,
     lower_ops,
     raise_ops,
 ):
@@ -165,7 +171,7 @@ def _append_static_couplings(
         g = float(c.coefficient_rad_s)
         kind = str(c.kind or "xx+yy").lower()
         if kind == "zz":
-            H0 = H0 + g * (z_ops[i] * z_ops[j])
+            H0 = H0 + g * (zz_ops[i] * zz_ops[j])
         elif kind == "xx":
             H0 = H0 + g * (x_ops[i] * x_ops[j])
         elif str(model_type).strip().lower() == "qubit_network":
@@ -186,6 +192,7 @@ def _append_control_terms(
     x_ops,
     y_ops,
     z_ops,
+    zz_ops,
 ) -> None:
     for ctrl in controls:
         axis = str(ctrl.operator.name).lower()
@@ -197,7 +204,7 @@ def _append_control_terms(
             if i < 0 or j < 0 or i >= n_qubits or j >= n_qubits or i == j:
                 continue
             coeff_env = engine._control_envelope(ctrl)
-            H.append([z_ops[i] * z_ops[j], coeff_env])
+            H.append([zz_ops[i] * zz_ops[j], coeff_env])
             continue
 
         target = -1 if ctrl.operator.target is None else int(ctrl.operator.target)

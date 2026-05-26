@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from musiq.backend.config import validate_backend_config
+from musiq.common.schemas import CircuitIR, CircuitGate
 from musiq.schemas.utils import ParameterSweepConfig, ParameterList
 from musiq.workflow.contracts import (
     AnalyserTrajectoryConfig,
@@ -80,7 +81,7 @@ _ANALYSER_TOP_KEYS = {
     "report",
     "analysis",
 }
-_CIRCUIT_TOP_KEYS = {"schema_version", "qasm_text", "qasm_path", "param_bindings", "circuit"}
+_CIRCUIT_TOP_KEYS = {"schema_version", "format", "qasm_text", "qasm_path", "param_bindings", "num_qubits", "num_clbits", "schedule", "circuit"}
 def _is_v1_circuit_payload(payload: dict[str, Any]) -> bool:
     return isinstance(payload.get("circuit"), dict)
 
@@ -97,11 +98,53 @@ def _map_circuit_payload(payload: dict[str, Any]) -> dict[str, Any]:
         circuit = dict(payload.get("circuit", {}) or {})
         return {
             "schema_version": str(payload.get("schema_version", "1.0")),
+            "format": str(circuit.get("format", payload.get("format", "openqasm3")) or "openqasm3"),
             "qasm_text": circuit.get("qasm_text"),
             "qasm_path": circuit.get("qasm_path"),
+            "num_qubits": circuit.get("num_qubits"),
+            "num_clbits": circuit.get("num_clbits"),
+            "schedule": circuit.get("schedule"),
             "param_bindings": dict(circuit.get("param_bindings", {}) or {}) or None,
         }
     return payload
+
+
+def _build_circuit_ir_from_schedule_payload(payload: dict[str, Any]) -> CircuitIR:
+    raw_schedule = dict(payload.get("schedule", {}) or {})
+    num_qubits = int(payload.get("num_qubits", 0) or 0)
+    num_clbits = int(payload.get("num_clbits", 0) or 0)
+    schedule: dict[int, list[list[CircuitGate]]] = {}
+    for raw_tick, raw_lanes in raw_schedule.items():
+        tick = int(raw_tick)
+        lanes: list[list[CircuitGate]] = []
+        for raw_lane in list(raw_lanes or []):
+            lane_gates: list[CircuitGate] = []
+            for raw_gate in list(raw_lane or []):
+                if isinstance(raw_gate, dict):
+                    lane_gates.append(
+                        CircuitGate(
+                            name=str(raw_gate.get("name", "")).strip(),
+                            qubits=[int(q) for q in list(raw_gate.get("qubits", []) or [])],
+                            params=[float(p) for p in list(raw_gate.get("params", []) or [])],
+                            clbits=[int(c) for c in list(raw_gate.get("clbits", []) or [])],
+                        )
+                    )
+                    continue
+                if not isinstance(raw_gate, list) or len(raw_gate) < 2:
+                    raise ValueError(f"Invalid schedule gate entry at tick {tick}: {raw_gate!r}")
+                gate_name = str(raw_gate[0]).strip()
+                gate_qubits = [int(q) for q in list(raw_gate[1] or [])]
+                gate_params = [float(raw_gate[2])] if len(raw_gate) >= 3 and raw_gate[2] is not None else []
+                lane_gates.append(CircuitGate(name=gate_name, qubits=gate_qubits, params=gate_params))
+            lanes.append(lane_gates)
+        schedule[tick] = lanes
+    return CircuitIR(
+        schema_version=str(payload.get("schema_version", "1.0")),
+        format=str(payload.get("format", "circuit_layer_yaml") or "circuit_layer_yaml"),
+        num_qubits=num_qubits,
+        num_clbits=num_clbits,
+        schedule=schedule,
+    )
 
 
 def _map_v3_pulse_payload(raw_pulse: dict[str, Any]) -> dict[str, Any]:
@@ -373,6 +416,15 @@ def circuit_from_payload(payload: dict[str, Any], base_dir: Path | None = None) 
     payload = _map_circuit_payload(payload)
     _reject_unknown("circuit top-level", set(payload), _CIRCUIT_TOP_KEYS - {"circuit"})
 
+    if payload.get("schedule") is not None:
+        if payload.get("qasm_text") or payload.get("qasm_path"):
+            raise ValueError("Circuit config must not mix schedule input with qasm_text/qasm_path.")
+        return CircuitConfig(
+            qasm_text=None,
+            circuit_ir=_build_circuit_ir_from_schedule_payload(payload),
+            param_bindings=dict(payload.get("param_bindings", {}) or {}) or None,
+        )
+
     qasm_text = payload.get("qasm_text")
     qasm_path = payload.get("qasm_path")
     if bool(qasm_text) == bool(qasm_path):
@@ -385,6 +437,7 @@ def circuit_from_payload(payload: dict[str, Any], base_dir: Path | None = None) 
 
     return CircuitConfig(
         qasm_text=str(qasm_text),
+        circuit_ir=None,
         param_bindings=dict(payload.get("param_bindings", {}) or {}) or None,
     )
 

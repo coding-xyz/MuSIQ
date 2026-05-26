@@ -93,13 +93,13 @@ class StudyPlanner:
             ]
         
         # 2. Define the continuous parameter space
-        parameter_list = config.parameter_list
-        if parameter_list is None:
+        parameter_sweep = config.parameter_sweep
+        if parameter_sweep is None:
             param_dims = []
             param_values = []
         else:
-            param_dims = list(parameter_list.parameters.keys())
-            param_values = [parameter_list.parameters[dim].values for dim in param_dims]
+            param_dims = list(parameter_sweep.parameters.keys())
+            param_values = [parameter_sweep.parameters[dim].values for dim in param_dims]
         
         # Generate all parameter combinations
         param_combinations = list(product(*param_values)) if param_dims else [()]

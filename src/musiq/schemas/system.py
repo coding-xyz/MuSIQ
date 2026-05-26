@@ -316,7 +316,13 @@ class SystemSpec:
         Returns:
             list[float]: Coupling strengths (g) for JC, Dispersive, and ZZ connections.
         """
-        return [conn.g_Hz for conn in self.connections if isinstance(conn, (JCConnectionSpec, DispersiveConnectionSpec, ZZConnectionSpec))]
+        values: list[float] = []
+        for conn in self.connections:
+            if isinstance(conn, (JCConnectionSpec, DispersiveConnectionSpec)):
+                values.append(conn.g_Hz)
+            elif isinstance(conn, ZZConnectionSpec):
+                values.append(conn.residual_zz_Hz)
+        return values
 
     @property
     def g_cavity_rad_s(self) -> list[float]:
@@ -325,7 +331,13 @@ class SystemSpec:
         Returns:
             list[float]: Angular coupling strengths (g) for JC, Dispersive, and ZZ connections.
         """
-        return [conn.g_rad_s for conn in self.connections if isinstance(conn, (JCConnectionSpec, DispersiveConnectionSpec, ZZConnectionSpec))]
+        values: list[float] = []
+        for conn in self.connections:
+            if isinstance(conn, (JCConnectionSpec, DispersiveConnectionSpec)):
+                values.append(conn.g_rad_s)
+            elif isinstance(conn, ZZConnectionSpec):
+                values.append(conn.residual_zz_rad_s)
+        return values
 
 
 def _summary_obj(cls: type[Any], raw: Any) -> Any:

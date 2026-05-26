@@ -25,6 +25,82 @@ class CircuitGate:
     clbits: list[int] = field(default_factory=list)
 
 
+def _copy_gate(gate: CircuitGate | dict[str, Any]) -> CircuitGate:
+    raw = gate if isinstance(gate, CircuitGate) else CircuitGate(**dict(gate))
+    return CircuitGate(
+        name=str(raw.name),
+        qubits=[int(q) for q in list(raw.qubits or [])],
+        params=[float(p) for p in list(raw.params or [])],
+        clbits=[int(c) for c in list(raw.clbits or [])],
+    )
+
+
+def build_serial_schedule(
+    gates: list[CircuitGate] | None,
+    *,
+    num_qubits: int,
+) -> dict[int, list[list[CircuitGate]]]:
+    """Build a schedule with one serial layer per logical gate."""
+    schedule: dict[int, list[list[CircuitGate]]] = {}
+    for tick, gate in enumerate(list(gates or [])):
+        lane_count = max(int(num_qubits), max([*list(gate.qubits or []), -1]) + 1, 1)
+        lanes: list[list[CircuitGate]] = [[] for _ in range(max(0, lane_count))]
+        targets = [int(q) for q in list(gate.qubits or [])]
+        if targets:
+            for q in targets:
+                lanes[int(q)].append(_copy_gate(gate))
+        else:
+            lanes[0].append(_copy_gate(gate))
+        schedule[int(tick)] = lanes
+    return schedule
+
+
+def flatten_schedule(schedule: dict[int, list[list[CircuitGate]]] | None) -> list[CircuitGate]:
+    """Return one logical gate stream per schedule layer.
+
+    Multi-qubit gates are mirrored across participating qubit lanes in the
+    schedule representation. This helper deduplicates those mirrored entries
+    while preserving within-layer order as observed from lower qubit lanes first.
+    """
+    out: list[CircuitGate] = []
+    for tick in sorted((schedule or {}).keys()):
+        lanes = list((schedule or {}).get(tick, []) or [])
+        consumed: set[tuple[int, int]] = set()
+        for lane_idx, lane in enumerate(lanes):
+            for gate_idx, gate in enumerate(list(lane or [])):
+                pos = (int(lane_idx), int(gate_idx))
+                if pos in consumed:
+                    continue
+                copied = _copy_gate(gate)
+                out.append(copied)
+                if len(copied.qubits) <= 1:
+                    consumed.add(pos)
+                    continue
+                matched_positions = [pos]
+                for partner in copied.qubits:
+                    if int(partner) == int(lane_idx):
+                        continue
+                    partner_lane = lanes[int(partner)] if 0 <= int(partner) < len(lanes) else []
+                    found: tuple[int, int] | None = None
+                    for partner_idx, partner_gate in enumerate(list(partner_lane or [])):
+                        partner_pos = (int(partner), int(partner_idx))
+                        if partner_pos in consumed:
+                            continue
+                        partner_copy = _copy_gate(partner_gate)
+                        if (
+                            partner_copy.name == copied.name
+                            and partner_copy.qubits == copied.qubits
+                            and partner_copy.params == copied.params
+                            and partner_copy.clbits == copied.clbits
+                        ):
+                            found = partner_pos
+                            break
+                    if found is not None:
+                        matched_positions.append(found)
+                consumed.update(matched_positions)
+    return out
+
+
 @dataclass
 class CircuitIR:
     """Normalized circuit representation used by compile pipeline.
@@ -34,7 +110,7 @@ class CircuitIR:
         format: Format of the circuit (e.g., "openqasm3"). Defaults to "openqasm3".
         num_qubits: Number of qubits in the circuit. Defaults to 0.
         num_clbits: Number of classical bits in the circuit. Defaults to 0.
-        gates: Ordered list of gate operations.
+        schedule: Parallel-aware circuit schedule keyed by integer layer.
         source_qasm: Original QASM source code string.
     """
 
@@ -42,8 +118,26 @@ class CircuitIR:
     format: str = "openqasm3"
     num_qubits: int = 0
     num_clbits: int = 0
-    gates: list[CircuitGate] = field(default_factory=list)
+    schedule: dict[int, list[list[CircuitGate]]] = field(default_factory=dict)
     source_qasm: str = ""
+
+    def __post_init__(self) -> None:
+        normalized: dict[int, list[list[CircuitGate]]] = {}
+        for raw_tick, raw_lanes in sorted(dict(self.schedule or {}).items(), key=lambda item: int(item[0])):
+            tick = int(raw_tick)
+            lanes = list(raw_lanes or [])
+            copied_lanes: list[list[CircuitGate]] = []
+            for lane in lanes:
+                copied_lanes.append([_copy_gate(gate) for gate in list(lane or [])])
+            while len(copied_lanes) < int(self.num_qubits):
+                copied_lanes.append([])
+            normalized[tick] = copied_lanes
+        self.schedule = normalized
+
+    @property
+    def gates(self) -> list[CircuitGate]:
+        """Derived flat logical-gate stream from ``schedule``."""
+        return flatten_schedule(self.schedule)
 
 
 @dataclass
@@ -55,7 +149,7 @@ class CircuitSpec:
         format: Format of the circuit (e.g., "openqasm3"). Defaults to "openqasm3".
         num_qubits: Number of qubits in the circuit. Defaults to 0.
         num_clbits: Number of classical bits in the circuit. Defaults to 0.
-        gates: Ordered list of gate operations.
+        schedule: Parallel-aware circuit schedule keyed by integer layer.
         source_qasm: Original QASM source code string.
         stage: Compilation stage of the snapshot (e.g., "normalized"). Defaults to "normalized".
     """
@@ -64,7 +158,7 @@ class CircuitSpec:
     format: str = "openqasm3"
     num_qubits: int = 0
     num_clbits: int = 0
-    gates: list[CircuitGate] = field(default_factory=list)
+    schedule: dict[int, list[list[CircuitGate]]] = field(default_factory=dict)
     source_qasm: str = ""
     stage: str = "normalized"
 
@@ -84,10 +178,10 @@ class CircuitSpec:
             format=str(circuit.format),
             num_qubits=int(circuit.num_qubits),
             num_clbits=int(circuit.num_clbits),
-            gates=[
-                gate if isinstance(gate, CircuitGate) else CircuitGate(**dict(gate))
-                for gate in list(circuit.gates or [])
-            ],
+            schedule={
+                int(tick): [[_copy_gate(gate) for gate in list(lane or [])] for lane in list(lanes or [])]
+                for tick, lanes in sorted(dict(circuit.schedule or {}).items(), key=lambda item: int(item[0]))
+            },
             source_qasm=str(circuit.source_qasm or ""),
             stage=str(stage),
         )
@@ -108,10 +202,10 @@ class CircuitSpec:
             format=str(raw.get("format", "openqasm3")),
             num_qubits=int(raw.get("num_qubits", 0) or 0),
             num_clbits=int(raw.get("num_clbits", 0) or 0),
-            gates=[
-                gate if isinstance(gate, CircuitGate) else CircuitGate(**dict(gate))
-                for gate in list(raw.get("gates", []) or [])
-            ],
+            schedule={
+                int(tick): [[_copy_gate(gate) for gate in list(lane or [])] for lane in list(lanes or [])]
+                for tick, lanes in dict(raw.get("schedule", {}) or {}).items()
+            },
             source_qasm=str(raw.get("source_qasm", "") or ""),
             stage=str(raw.get("stage", "normalized") or "normalized"),
         )
@@ -127,7 +221,10 @@ class CircuitSpec:
             "format": self.format,
             "num_qubits": self.num_qubits,
             "num_clbits": self.num_clbits,
-            "gates": [asdict(gate) for gate in self.gates],
+            "schedule": {
+                int(tick): [[asdict(_copy_gate(gate)) for gate in list(lane or [])] for lane in list(lanes or [])]
+                for tick, lanes in sorted(dict(self.schedule or {}).items(), key=lambda item: int(item[0]))
+            },
             "source_qasm": self.source_qasm,
             "stage": self.stage,
         }

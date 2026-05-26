@@ -98,7 +98,13 @@ def _single_qubit_shape(cfg: dict[str, Any]) -> str:
 
 
 def _single_qubit_shape_hardware_keys(cfg: dict[str, Any]) -> list[str]:
-    keys = ["gate_duration_ns", "xy_freq_Hz", "single_qubit_shape"]
+    keys = [
+        "gate_duration_ns",
+        "single_qubit_gate_duration_ns",
+        "single_qubit_gate_amp_scale",
+        "xy_freq_Hz",
+        "single_qubit_shape",
+    ]
     shape = _single_qubit_shape(cfg)
     if shape in {"gaussian", "drag"}:
         keys.append("single_qubit_sigma_fraction")
@@ -115,7 +121,7 @@ def _single_qubit_shape_params(
     rotation_rad: float,
     rotation_axis: str,
 ) -> tuple[str, dict[str, Any]]:
-    gate_dur_s = float(cfg["gate_duration_ns"]) * NS_TO_S
+    gate_dur_s = float(cfg["single_qubit_gate_duration_ns"]) * NS_TO_S
     shape = _single_qubit_shape(cfg)
     params: dict[str, Any] = {
         "rotation_rad": float(rotation_rad),
@@ -137,16 +143,35 @@ def resolve_lowering_hardware(hw: dict[str, Any] | None = None) -> dict[str, Any
     """Normalize lowering device/pulse knobs into one resolved config."""
     hw = hw or {}
     reject_unknown_keys("device", hw, MODEL_HARDWARE_KEYS)
+    typed_defaults = _typed_defaults(hw)
     gate_dur = float(hw.get("gate_duration_ns", 20.0))
+    if "gate_duration_ns" in typed_defaults:
+        gate_dur = float(typed_defaults.get("gate_duration_ns", gate_dur))
+    single_gate_dur = float(hw.get("single_qubit_gate_duration_ns", gate_dur))
+    if "single_qubit_gate_duration_ns" in typed_defaults:
+        single_gate_dur = float(typed_defaults.get("single_qubit_gate_duration_ns", single_gate_dur))
+    double_gate_dur = float(hw.get("double_qubit_gate_duration_ns", 2.0 * single_gate_dur))
+    if "double_qubit_gate_duration_ns" in typed_defaults:
+        double_gate_dur = float(typed_defaults.get("double_qubit_gate_duration_ns", double_gate_dur))
     idle_dur = float(hw.get("idle_duration_ns", gate_dur))
+    if "idle_duration_ns" in typed_defaults:
+        idle_dur = float(typed_defaults.get("idle_duration_ns", idle_dur))
     measure_dur = float(hw.get("measure_duration_ns", 200.0))
+    if "measure_duration_ns" in typed_defaults:
+        measure_dur = float(typed_defaults.get("measure_duration_ns", measure_dur))
     edge_ns = float(hw.get("rect_edge_ns", 2.0))
+    if "rect_edge_ns" in typed_defaults:
+        edge_ns = float(typed_defaults.get("rect_edge_ns", edge_ns))
     schedule_value = hw.get("schedule", hw.get("schedule_policy", "serial"))
+    if "schedule_policy" in typed_defaults:
+        schedule_value = typed_defaults.get("schedule_policy", schedule_value)
     resolved = {
-        "xy_freq_Hz": float(hw.get("xy_freq_Hz", 5.0e9)),
-        "ro_freq_Hz": float(hw.get("ro_freq_Hz", 6.5e9)),
+        "xy_freq_Hz": float(typed_defaults.get("xy_carrier_freq_Hz", typed_defaults.get("xy_freq_Hz", hw.get("xy_freq_Hz", 5.0e9)))),
+        "ro_freq_Hz": float(typed_defaults.get("ro_carrier_freq_Hz", typed_defaults.get("ro_freq_Hz", hw.get("ro_freq_Hz", 6.5e9)))),
         "schedule_policy": str(schedule_value).strip().lower() or "serial",
         "gate_duration_ns": gate_dur,
+        "single_qubit_gate_duration_ns": single_gate_dur,
+        "double_qubit_gate_duration_ns": double_gate_dur,
         "idle_duration_ns": idle_dur,
         "measure_duration_ns": measure_dur,
         "measure_amp": float(hw.get("measure_amp", 0.8)),
@@ -156,6 +181,8 @@ def resolve_lowering_hardware(hw: dict[str, Any] | None = None) -> dict[str, Any
         "single_qubit_sigma_fraction": float(hw.get("single_qubit_sigma_fraction", 1.0 / 6.0)),
         "single_qubit_drag_beta": float(hw.get("single_qubit_drag_beta", 0.35)),
         "single_qubit_rect_edge_ns": float(hw.get("single_qubit_rect_edge_ns", hw.get("rect_edge_ns", 0.0))),
+        "single_qubit_gate_amp_scale": float(hw.get("single_qubit_gate_amp_scale", 1.0)),
+        "double_qubit_gate_amp_scale": float(hw.get("double_qubit_gate_amp_scale", 1.0)),
         "reset_measure_duration_ns": float(hw.get("reset_measure_duration_ns", max(measure_dur, 400.0))),
         "reset_deplete_duration_ns": float(hw.get("reset_deplete_duration_ns", 150.0)),
         "reset_latency_duration_ns": float(hw.get("reset_latency_duration_ns", 120.0)),
@@ -166,6 +193,9 @@ def resolve_lowering_hardware(hw: dict[str, Any] | None = None) -> dict[str, Any
         "reset_cond_on": int(hw.get("reset_cond_on", 1)),
         "reset_apply_feedback": bool(hw.get("reset_apply_feedback", True)),
         "reset_feedback_policy": str(hw.get("reset_feedback_policy", "parallel")).strip().lower() or "parallel",
+        "defaults": typed_defaults,
+        "gates": dict(hw.get("gates", {}) or {}),
+        "channel_overrides": dict(hw.get("channel_overrides", {}) or {}),
     }
     measure_segments = list(hw.get("measure_segments", []) or [])
     if measure_segments:
@@ -185,7 +215,104 @@ def resolve_lowering_hardware(hw: dict[str, Any] | None = None) -> dict[str, Any
             resolved["measure_duration_ns"] = float(sum(seg["duration_ns"] for seg in resolved["measure_segments"]))
             resolved["measure_amp"] = float(resolved["measure_segments"][0]["amp"])
     resolved["measure_start_delay_ns"] = float(hw.get("measure_start_delay_ns", 0.0) or 0.0)
+    # Preserve connection metadata so two-qubit lowering can resolve per-pair
+    # coupler strengths such as max_effective_coupling_Hz during full runs.
+    resolved["connections"] = [dict(item) for item in list(hw.get("connections", []) or []) if isinstance(item, dict)]
     return resolved
+
+
+def _typed_defaults(hw: dict[str, Any] | None) -> dict[str, Any]:
+    raw = dict((hw or {}).get("defaults", {}) or {})
+    if not isinstance(raw, dict):
+        return {}
+    return raw
+
+
+def _tc_channel_name(qubits: list[int]) -> str:
+    qs = [int(q) for q in list(qubits or [0, 1])]
+    i, j = min(qs), max(qs)
+    return f"TC_q{i}_q{j}"
+
+
+def _channel_name_for_gate(gate_name: str, qubits: list[int], tc_index: int | None, tc_channel: str | None = None) -> str | None:
+    gate = str(gate_name).strip().lower()
+    if gate in {"x", "sx", "rx", "ry", "h"}:
+        if not qubits:
+            return None
+        return f"XY_{int(qubits[0])}"
+    if gate == "measure":
+        if not qubits:
+            return None
+        return f"RO_{int(qubits[0])}"
+    if gate in {"cz", "cx"}:
+        return str(tc_channel or _tc_channel_name(qubits))
+    return None
+
+
+def _typed_gate_recipe(
+    hw: dict[str, Any] | None,
+    gate_name: str,
+    *,
+    channel_name: str | None = None,
+) -> dict[str, Any] | None:
+    raw_hw = hw or {}
+    gates = dict(raw_hw.get("gates", {}) or {})
+    if not gates:
+        return None
+    gate = str(gate_name).strip().lower()
+    gate_aliases = [gate]
+    if gate in {"z", "rz"}:
+        gate_aliases.append("virtual_z")
+    recipe: dict[str, Any] | None = None
+    for candidate in gate_aliases:
+        raw_recipe = gates.get(candidate)
+        if isinstance(raw_recipe, dict):
+            recipe = dict(raw_recipe)
+            break
+    if recipe is None:
+        return None
+    if channel_name:
+        raw_overrides = dict(raw_hw.get("channel_overrides", {}) or {})
+        channel_overrides = raw_overrides.get(channel_name)
+        if isinstance(channel_overrides, dict):
+            for candidate in gate_aliases:
+                override_recipe = channel_overrides.get(candidate)
+                if isinstance(override_recipe, dict):
+                    recipe = {**recipe, **dict(override_recipe)}
+                    break
+    return recipe
+
+
+def _single_qubit_shape_from_recipe(recipe: dict[str, Any], cfg: dict[str, Any]) -> str:
+    shape = str(recipe.get("shape", "") or "").strip().lower()
+    if shape in {"gaussian", "drag", "rect"}:
+        return shape
+    return _single_qubit_shape(cfg)
+
+
+def _single_qubit_shape_params_from_recipe(
+    recipe: dict[str, Any],
+    cfg: dict[str, Any],
+    *,
+    duration_ns: float,
+    rotation_rad: float,
+    rotation_axis: str,
+) -> tuple[str, dict[str, Any]]:
+    shape = _single_qubit_shape_from_recipe(recipe, cfg)
+    params: dict[str, Any] = {
+        "rotation_rad": float(rotation_rad),
+        "rotation_axis": str(rotation_axis),
+    }
+    if shape in {"gaussian", "drag"}:
+        sigma_fraction = max(float(recipe.get("sigma_fraction", cfg.get("single_qubit_sigma_fraction", 1.0 / 6.0))), 1e-6)
+        params["sigma_s"] = max(float(duration_ns) * NS_TO_S * sigma_fraction, 1e-18)
+    if shape == "drag":
+        params["beta"] = float(recipe.get("drag_beta", cfg.get("single_qubit_drag_beta", 0.35)))
+    if shape == "rect":
+        edge_ns = max(float(recipe.get("edge_ns", recipe.get("rect_edge_ns", cfg.get("single_qubit_rect_edge_ns", 0.0)))), 0.0)
+        params["rise_s"] = edge_ns * NS_TO_S
+        params["fall_s"] = edge_ns * NS_TO_S
+    return shape, params
 
 
 def _xy_carrier(cfg: dict[str, Any], phase: float = 0.0) -> dict[str, float]:
@@ -196,8 +323,46 @@ def _ro_carrier(cfg: dict[str, Any], phase: float = 0.0) -> dict[str, float]:
     return {"freq": float(cfg["ro_freq_Hz"]), "phase": float(phase)}
 
 
+def _tc_connection_parameters(hw: dict[str, Any] | None, tc_index: int | None, tc_channel: str | None = None) -> dict[str, Any]:
+    if hw is None:
+        return {}
+    connections = [dict(item) for item in list(hw.get("connections", []) or []) if isinstance(item, dict)]
+    if tc_channel:
+        import re
+
+        match = re.match(r"^TC_q(\d+)_q(\d+)$", str(tc_channel), re.IGNORECASE)
+        if match:
+            qa, qb = int(match.group(1)), int(match.group(2))
+            want = {f"q{qa}", f"q{qb}"}
+            for item in connections:
+                endpoints = {str(item.get("a", "")).strip(), str(item.get("b", "")).strip()}
+                if endpoints == want:
+                    return dict(item.get("parameters", {}) or {})
+    if tc_index is None:
+        return {}
+    if 0 <= int(tc_index) < len(connections):
+        return dict(connections[int(tc_index)].get("parameters", {}) or {})
+    return {}
+
+
+def _double_qubit_effective_amp_rad_s(
+    *,
+    cfg: dict[str, Any],
+    hw: dict[str, Any] | None,
+    tc_index: int | None,
+    tc_channel: str | None,
+    duration_s: float,
+) -> float:
+    conn_params = _tc_connection_parameters(hw, tc_index, tc_channel)
+    amp_scale = float(cfg["double_qubit_gate_amp_scale"])
+    max_effective_hz = float(conn_params.get("max_effective_coupling_Hz", 0.0) or 0.0)
+    if max_effective_hz > 0.0:
+        return amp_scale * (2.0 * math.pi * max_effective_hz)
+    return amp_scale * (-math.pi / max(duration_s, 1e-18))
+
+
 def _shared_single_qubit_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
-    gate_dur = float(cfg["gate_duration_ns"])
+    gate_dur = float(cfg["single_qubit_gate_duration_ns"])
     shape, params = _single_qubit_shape_params(cfg, rotation_rad=0.0, rotation_axis="x")
     return [
         {
@@ -222,7 +387,7 @@ def _z_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _h_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
-    gate_dur = float(cfg["gate_duration_ns"])
+    gate_dur = float(cfg["single_qubit_gate_duration_ns"])
     xy_shape, xy_params = _single_qubit_shape_params(cfg, rotation_rad=0.5 * math.pi, rotation_axis="y")
     return [
         {
@@ -242,11 +407,10 @@ def _h_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _cz_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
-    gate_dur = float(cfg["gate_duration_ns"])
+    duration = float(cfg["double_qubit_gate_duration_ns"])
     edge_s = float(cfg["rect_edge_ns"]) * NS_TO_S
-    duration = 2.0 * gate_dur
     duration_s = duration * NS_TO_S
-    amp = -math.pi / max(duration_s, 1e-18)
+    amp = float(cfg["double_qubit_gate_amp_scale"]) * (-math.pi / max(duration_s, 1e-18))
     return [
         {
             "kind": "pulse",
@@ -259,16 +423,16 @@ def _cz_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             "amp": amp,
             "params": {"rise_s": edge_s, "fall_s": edge_s, "target_conditional_phase_rad": math.pi},
             "carrier": None,
-            "hardware_keys": ["gate_duration_ns", "rect_edge_ns"],
+            "hardware_keys": ["gate_duration_ns", "double_qubit_gate_duration_ns", "double_qubit_gate_amp_scale", "rect_edge_ns"],
         }
     ]
 
 
 def _cx_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
-    gate_dur = float(cfg["gate_duration_ns"])
-    gate_dur_s = gate_dur * NS_TO_S
+    gate_dur_s = float(cfg["single_qubit_gate_duration_ns"]) * NS_TO_S
     edge_s = float(cfg["rect_edge_ns"]) * NS_TO_S
-    duration = 2.0 * gate_dur
+    duration = float(cfg["double_qubit_gate_duration_ns"])
+    amp_scale = float(cfg["double_qubit_gate_amp_scale"])
     return [
         {
             "kind": "pulse",
@@ -278,10 +442,10 @@ def _cx_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             "end_ns": duration,
             "duration_ns": duration,
             "shape": "drag",
-            "amp": 1.2,
+            "amp": 1.2 * amp_scale,
             "params": {"beta": 0.35, "sigma_s": gate_dur_s / 4.0},
             "carrier": _xy_carrier(cfg, phase=0.0),
-            "hardware_keys": ["gate_duration_ns", "xy_freq_Hz"],
+            "hardware_keys": ["gate_duration_ns", "single_qubit_gate_duration_ns", "double_qubit_gate_duration_ns", "double_qubit_gate_amp_scale", "xy_freq_Hz"],
         },
         {
             "kind": "pulse",
@@ -291,10 +455,10 @@ def _cx_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             "end_ns": duration,
             "duration_ns": duration,
             "shape": "drag",
-            "amp": 1.2,
+            "amp": 1.2 * amp_scale,
             "params": {"beta": 0.35, "sigma_s": gate_dur_s / 4.0},
             "carrier": _xy_carrier(cfg, phase=0.2),
-            "hardware_keys": ["gate_duration_ns", "xy_freq_Hz"],
+            "hardware_keys": ["gate_duration_ns", "single_qubit_gate_duration_ns", "double_qubit_gate_duration_ns", "double_qubit_gate_amp_scale", "xy_freq_Hz"],
         },
         {
             "kind": "pulse",
@@ -304,10 +468,10 @@ def _cx_steps(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             "end_ns": duration,
             "duration_ns": duration,
             "shape": "rect",
-            "amp": 0.75,
+            "amp": 0.75 * amp_scale,
             "params": {"rise_s": edge_s, "fall_s": edge_s},
             "carrier": None,
-            "hardware_keys": ["gate_duration_ns", "rect_edge_ns"],
+            "hardware_keys": ["gate_duration_ns", "double_qubit_gate_duration_ns", "double_qubit_gate_amp_scale", "rect_edge_ns"],
         },
     ]
 
@@ -481,7 +645,8 @@ def _catalog_entry(
 def build_gate_mapping_catalog(hw: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return a machine-readable catalog of supported gate-to-pulse mappings."""
     cfg = resolve_lowering_hardware(hw)
-    gate_dur = float(cfg["gate_duration_ns"])
+    gate_dur = float(cfg["single_qubit_gate_duration_ns"])
+    double_gate_dur = float(cfg["double_qubit_gate_duration_ns"])
     idle_dur = float(cfg["idle_duration_ns"])
     measure_dur = float(cfg["measure_duration_ns"])
     reset_total = (
@@ -564,18 +729,18 @@ def build_gate_mapping_catalog(hw: dict[str, Any] | None = None) -> dict[str, An
         _catalog_entry(
             name="cz",
             arity=2,
-            duration_ns=2.0 * gate_dur,
+            duration_ns=double_gate_dur,
             steps=_cz_steps(cfg),
             summary="Two-qubit coupler pulse on TC_*.",
-            hardware_keys=["gate_duration_ns", "rect_edge_ns"],
+            hardware_keys=["gate_duration_ns", "double_qubit_gate_duration_ns", "double_qubit_gate_amp_scale", "rect_edge_ns"],
         ),
         _catalog_entry(
             name="cx",
             arity=2,
-            duration_ns=2.0 * gate_dur,
+            duration_ns=double_gate_dur,
             steps=_cx_steps(cfg),
             summary="Two XY DRAG pulses plus one coupler pulse.",
-            hardware_keys=["gate_duration_ns", "rect_edge_ns", "xy_freq_Hz"],
+            hardware_keys=["gate_duration_ns", "single_qubit_gate_duration_ns", "double_qubit_gate_duration_ns", "double_qubit_gate_amp_scale", "rect_edge_ns", "xy_freq_Hz"],
         ),
         _catalog_entry(
             name="id",
@@ -642,6 +807,7 @@ def instantiate_operation_recipe(
     start_ns: float,
     hw: dict[str, Any] | None = None,
     tc_index: int | None = None,
+    tc_channel: str | None = None,
     reset_feedback_offset_ns: float = 0.0,
 ) -> tuple[list[tuple[str, PulseSpec]], float, list[dict[str, Any]]]:
     """Instantiate one operation into scheduled pulses and events."""
@@ -665,9 +831,122 @@ def instantiate_operation_recipe(
             )
         )
 
-    gate_dur = float(cfg["gate_duration_ns"])
+    gate_dur = float(cfg["single_qubit_gate_duration_ns"])
     idle_dur = float(cfg["idle_duration_ns"])
     gate_dur_s = gate_dur * NS_TO_S
+    typed_channel = _channel_name_for_gate(gate, qubits, tc_index, tc_channel)
+    typed_recipe = _typed_gate_recipe(hw, gate, channel_name=typed_channel)
+    if typed_recipe is not None:
+        recipe_type = str(typed_recipe.get("recipe_type", gate if gate not in {"rz", "z"} else "virtual_z")).strip().lower()
+        if recipe_type == "virtual_z":
+            return pulses, 0.0, events
+        if recipe_type in {"x", "sx", "rx", "ry", "h"}:
+            if recipe_type in {"rx", "ry"}:
+                rotation_rad = float(list(gate_params or [0.0])[0])
+            elif recipe_type == "x":
+                rotation_rad = math.pi
+            else:
+                rotation_rad = 0.5 * math.pi
+            duration = float(typed_recipe.get("duration_ns", gate_dur))
+            shape, params = _single_qubit_shape_params_from_recipe(
+                typed_recipe,
+                cfg,
+                duration_ns=duration,
+                rotation_rad=rotation_rad,
+                rotation_axis="y" if recipe_type in {"ry", "h"} else "x",
+            )
+            amp_hz = float(typed_recipe.get("amplitude_Hz", 0.0) or 0.0)
+            if amp_hz > 0.0:
+                amp = 2.0 * math.pi * amp_hz
+                if recipe_type in {"rx", "ry"}:
+                    amp *= float(rotation_rad) / math.pi
+            else:
+                amp = _xy_rotation_amp_rad_s(
+                    shape=shape,
+                    duration_s=duration * NS_TO_S,
+                    params=params,
+                    rotation_rad=float(params["rotation_rad"]),
+                )
+            carrier_freq_hz = float(typed_recipe.get("carrier_freq_Hz", cfg["xy_freq_Hz"]))
+            phase_rad = float(typed_recipe.get("phase_rad", 0.5 * math.pi if recipe_type in {"ry", "h"} else 0.0))
+            for q in qubits:
+                add(
+                    f"XY_{q}",
+                    start_ns,
+                    start_ns + duration,
+                    amp,
+                    shape,
+                    params,
+                    {"freq": carrier_freq_hz, "phase": phase_rad},
+                )
+            return pulses, duration, events
+        if recipe_type == "cz":
+            duration = float(typed_recipe["duration_ns"])
+            amp = 2.0 * math.pi * float(typed_recipe["amplitude_Hz"])
+            edge_ns = float(typed_recipe.get("edge_ns", typed_recipe.get("rect_edge_ns", cfg["rect_edge_ns"])))
+            add(
+                str(tc_channel or _tc_channel_name(qubits)),
+                start_ns,
+                start_ns + duration,
+                amp,
+                str(typed_recipe.get("shape", "rect") or "rect"),
+                {
+                    "rise_s": edge_ns * NS_TO_S,
+                    "fall_s": edge_ns * NS_TO_S,
+                    "target_conditional_phase_rad": float(typed_recipe.get("target_conditional_phase_rad", math.pi)),
+                },
+                None,
+            )
+            return pulses, duration, events
+        if recipe_type == "id":
+            return pulses, float(typed_recipe.get("duration_ns", idle_dur)), events
+        if recipe_type == "measure":
+            segments = list(typed_recipe.get("segments", []) or [])
+            if not segments:
+                segments = [
+                    {
+                        "duration_ns": float(typed_recipe.get("duration_ns", cfg["measure_duration_ns"])),
+                        "amplitude": float(typed_recipe.get("amplitude", cfg["measure_amp"])),
+                        "shape": str(typed_recipe.get("shape", "readout") or "readout"),
+                        "rise_ns": float(typed_recipe.get("rise_ns", typed_recipe.get("edge_ns", cfg["readout_edge_ns"])) or 0.0),
+                        "fall_ns": float(typed_recipe.get("fall_ns", typed_recipe.get("edge_ns", cfg["readout_edge_ns"])) or 0.0),
+                    }
+                ]
+            duration = 0.0
+            carrier_freq_hz = float(typed_recipe.get("carrier_freq_Hz", cfg["ro_freq_Hz"]))
+            phase_rad = float(typed_recipe.get("phase_rad", 0.0))
+            for q in qubits:
+                offset_ns = 0.0
+                for idx, seg in enumerate(segments):
+                    seg_duration = float(seg.get("duration_ns", 0.0) or 0.0)
+                    if seg_duration <= 0.0:
+                        continue
+                    seg_rise_ns = float(seg.get("rise_ns", seg.get("edge_ns", cfg["readout_edge_ns"])) or 0.0)
+                    seg_fall_ns = float(seg.get("fall_ns", seg.get("edge_ns", cfg["readout_edge_ns"])) or 0.0)
+                    add(
+                        f"RO_{q}",
+                        start_ns + offset_ns,
+                        start_ns + offset_ns + seg_duration,
+                        float(seg.get("amplitude", seg.get("amp", cfg["measure_amp"]))),
+                        str(seg.get("shape", "readout") or "readout"),
+                        {
+                            "rise_s": seg_rise_ns * NS_TO_S,
+                            "fall_s": seg_fall_ns * NS_TO_S,
+                            "measure_segment_index": idx,
+                            "measure_segment_count": len(segments),
+                            **breakable_params(
+                                keep_head_s=DEFAULT_BREAK_KEEP_HEAD_S,
+                                keep_tail_s=DEFAULT_BREAK_KEEP_TAIL_S,
+                                break_kind="readout",
+                                break_stage="measure",
+                            ),
+                        },
+                        {"freq": carrier_freq_hz, "phase": phase_rad},
+                    )
+                    offset_ns += seg_duration
+                duration = max(duration, offset_ns)
+            return pulses, duration, events
+
     if gate in {"x", "sx", "rx", "ry"}:
         if gate in {"rx", "ry"}:
             rotation_rad = float(list(gate_params or [0.0])[0])
@@ -683,7 +962,7 @@ def instantiate_operation_recipe(
             duration_s=gate_dur_s,
             params=params,
             rotation_rad=float(params["rotation_rad"]),
-        )
+        ) * float(cfg["single_qubit_gate_amp_scale"])
         for q in qubits:
             add(
                 f"XY_{q}",
@@ -708,7 +987,7 @@ def instantiate_operation_recipe(
             duration_s=gate_dur_s,
             params=params,
             rotation_rad=float(params["rotation_rad"]),
-        )
+        ) * float(cfg["single_qubit_gate_amp_scale"])
         for q in qubits:
             add(
                 f"XY_{q}",
@@ -729,11 +1008,17 @@ def instantiate_operation_recipe(
 
     if gate == "cz":
         edge_s = float(cfg["rect_edge_ns"]) * NS_TO_S
-        duration = 2.0 * gate_dur
+        duration = float(cfg["double_qubit_gate_duration_ns"])
         duration_s = duration * NS_TO_S
-        amp = -math.pi / max(duration_s, 1e-18)
+        amp = _double_qubit_effective_amp_rad_s(
+            cfg=cfg,
+            hw=hw,
+            tc_index=tc_index,
+            tc_channel=tc_channel,
+            duration_s=duration_s,
+        )
         add(
-            f"TC_{0 if tc_index is None else int(tc_index)}",
+            str(tc_channel or _tc_channel_name(qubits)),
             start_ns,
             start_ns + duration,
             amp,
@@ -745,12 +1030,20 @@ def instantiate_operation_recipe(
 
     if gate == "cx":
         qs = qubits or [0, 1]
-        duration = 2.0 * gate_dur
+        duration = float(cfg["double_qubit_gate_duration_ns"])
         gate_sigma_s = gate_dur_s / 4.0
         edge_s = float(cfg["rect_edge_ns"]) * NS_TO_S
-        add(f"XY_{qs[0]}", start_ns, start_ns + duration, 1.2, "drag", {"beta": 0.35, "sigma_s": gate_sigma_s}, _xy_carrier(cfg, phase=0.0))
-        add(f"XY_{qs[-1]}", start_ns, start_ns + duration, 1.2, "drag", {"beta": 0.35, "sigma_s": gate_sigma_s}, _xy_carrier(cfg, phase=0.2))
-        add(f"TC_{0 if tc_index is None else int(tc_index)}", start_ns, start_ns + duration, 0.75, "rect", {"rise_s": edge_s, "fall_s": edge_s}, None)
+        amp_scale = float(cfg["double_qubit_gate_amp_scale"])
+        tc_amp = _double_qubit_effective_amp_rad_s(
+            cfg=cfg,
+            hw=hw,
+            tc_index=tc_index,
+            tc_channel=tc_channel,
+            duration_s=duration * NS_TO_S,
+        )
+        add(f"XY_{qs[0]}", start_ns, start_ns + duration, 1.2 * amp_scale, "drag", {"beta": 0.35, "sigma_s": gate_sigma_s}, _xy_carrier(cfg, phase=0.0))
+        add(f"XY_{qs[-1]}", start_ns, start_ns + duration, 1.2 * amp_scale, "drag", {"beta": 0.35, "sigma_s": gate_sigma_s}, _xy_carrier(cfg, phase=0.2))
+        add(str(tc_channel or _tc_channel_name(qubits)), start_ns, start_ns + duration, tc_amp, "rect", {"rise_s": edge_s, "fall_s": edge_s}, None)
         return pulses, duration, events
 
     if gate == "measure":

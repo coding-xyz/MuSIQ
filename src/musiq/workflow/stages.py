@@ -8,6 +8,7 @@ from copy import deepcopy
 from musiq.analysis.metrics import resolve_metrics_payload
 from musiq.analysis.dispatcher import dispatch_analysis
 from musiq.schemas.results import CaseAnalysis
+from musiq.schemas.circuit import build_serial_schedule
 from musiq.analysis.sensitivity import build_error_budget_v2, build_sensitivity_report
 from musiq.backend.compile_pipeline import CompilePipeline
 from musiq.backend.config import load_backend_config
@@ -64,14 +65,27 @@ def _apply_study_prep_sequence_to_qasm(qasm_text: str, prep_sequence) -> str:
     circuit = CircuitAdapter.from_qasm(qasm_text)
     prep_gates = [_prep_gate_from_spec(item, num_qubits=circuit.num_qubits) for item in sequence]
     measure_gates = [deepcopy(gate) for gate in list(circuit.gates or []) if str(gate.name).strip().lower() == "measure"]
-    circuit.gates = prep_gates + measure_gates
+    circuit.schedule = build_serial_schedule(prep_gates + measure_gates, num_qubits=circuit.num_qubits)
     circuit.source_qasm = to_qasm(circuit)
     return circuit.source_qasm
 
 
+def _apply_study_prep_sequence_to_circuit(circuit: object, prep_sequence) -> object:
+    sequence = list(prep_sequence or [])
+    if not sequence:
+        return circuit
+    prep_gates = [_prep_gate_from_spec(item, num_qubits=circuit.num_qubits) for item in sequence]
+    measure_gates = [deepcopy(gate) for gate in list(circuit.gates or []) if str(gate.name).strip().lower() == "measure"]
+    circuit.schedule = build_serial_schedule(prep_gates + measure_gates, num_qubits=circuit.num_qubits)
+    if getattr(circuit, "source_qasm", ""):
+        circuit.source_qasm = to_qasm(circuit)
+    return circuit
+
+
 def parse_compile_lower_model(
     *,
-    qasm_text: str,
+    qasm_text: str | None,
+    circuit_ir=None,
     backend_path: str | None,
     backend_config=None,
     out,
@@ -93,12 +107,21 @@ def parse_compile_lower_model(
     primary_step = select_primary_study_step(study, fallback_solver_mode=solver_mode)
     prep_state = _normalize_study_prep(primary_step)
     effective_qasm_text = qasm_text
-    if prep_state.get("prep_sequence") is not None:
-        effective_qasm_text = _apply_study_prep_sequence_to_qasm(qasm_text, prep_state.get("prep_sequence"))
     t0 = time.perf_counter()
-    circuit = CircuitAdapter.from_qasm(effective_qasm_text, param_bindings=param_bindings)
+    if circuit_ir is not None:
+        circuit = deepcopy(circuit_ir)
+        if prep_state.get("prep_sequence") is not None:
+            circuit = _apply_study_prep_sequence_to_circuit(circuit, prep_state.get("prep_sequence"))
+        if effective_qasm_text is None and getattr(circuit, "source_qasm", ""):
+            effective_qasm_text = circuit.source_qasm
+    else:
+        if qasm_text is None:
+            raise ValueError("Missing circuit input: provide qasm_text or circuit_ir.")
+        if prep_state.get("prep_sequence") is not None:
+            effective_qasm_text = _apply_study_prep_sequence_to_qasm(qasm_text, prep_state.get("prep_sequence"))
+        circuit = CircuitAdapter.from_qasm(effective_qasm_text, param_bindings=param_bindings)
     t1 = time.perf_counter()
-    stage_timings["qasm_parse"] = t1 - t0
+    stage_timings["circuit_parse"] = t1 - t0
     if backend_config is not None:
         cfg = backend_config
     else:

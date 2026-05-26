@@ -45,6 +45,8 @@ device:
       a: q0
       b: q1
       parameters:
-        g_Hz: 0.0
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
   simulation_level: nlevel
   control_scale: 1.0

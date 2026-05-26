@@ -8,17 +8,32 @@ import math
 import re
 
 from musiq.common.schemas import CircuitGate, CircuitIR
+from musiq.schemas.circuit import build_serial_schedule
 
 
 class CircuitAdapter:
     """Adapter between OpenQASM/Qiskit and ``CircuitIR``."""
-    _HEADER_RE = re.compile(r"^OPENQASM\s+3(?:\.0)?\s*$", re.IGNORECASE)
-    _DECL_QUBIT_RE = re.compile(r"^qubit\[(\d+)\]\s+([A-Za-z_]\w*)\s*$")
-    _DECL_BIT_RE = re.compile(r"^bit\[(\d+)\]\s+([A-Za-z_]\w*)\s*$")
-    _MEASURE_RE = re.compile(
+    # Version Dispatchers
+    _HEADER_V2_RE = re.compile(r"^OPENQASM\s+2(?:\.0)?\s*$", re.IGNORECASE)
+    _HEADER_V3_RE = re.compile(r"^OPENQASM\s+3(?:\.0)?\s*$", re.IGNORECASE)
+
+    # QASM 2.0 Specifics
+    _V2_DECL_QUBIT_RE = re.compile(r"^qreg\s+([A-Za-z_]\w*)\[(\d+)\]\s*$", re.IGNORECASE)
+    _V2_DECL_BIT_RE = re.compile(r"^creg\s+([A-Za-z_]\w*)\[(\d+)\]\s*$", re.IGNORECASE)
+    _V2_MEASURE_RE = re.compile(
+        r"^measure\s+([A-Za-z_]\w*)\[(\d+)\]\s*=\s*([A-Za-z_]\w*)\[(\d+)\]\s*$",
+        re.IGNORECASE,
+    )
+
+    # QASM 3.0 Specifics
+    _V3_DECL_QUBIT_RE = re.compile(r"^qubit\[(\d+)\]\s+([A-Za-z_]\w*)\s*$", re.IGNORECASE)
+    _V3_DECL_BIT_RE = re.compile(r"^bit\[(\d+)\]\s+([A-Za-z_]\w*)\s*$", re.IGNORECASE)
+    _V3_MEASURE_RE = re.compile(
         r"^measure\s+([A-Za-z_]\w*)\[(\d+)\]\s*->\s*([A-Za-z_]\w*)\[(\d+)\]\s*$",
         re.IGNORECASE,
     )
+
+    # Shared
     _GATE_RE = re.compile(r"^([A-Za-z_]\w*)(?:\(([^)]*)\))?\s+(.+)\s*$", re.IGNORECASE)
 
     @staticmethod
@@ -79,101 +94,158 @@ class CircuitAdapter:
 
     @staticmethod
     def from_qasm(qasm_text: str, param_bindings: dict[str, float] | None = None) -> CircuitIR:
-        """Parse a minimal OpenQASM 3 program into ``CircuitIR``.
-
-        Example:
-            ```python
-            from musiq.circuit.import_qasm import CircuitAdapter
-
-            qasm = "OPENQASM 3; qubit[1] q; x q[0];"
-            cir = CircuitAdapter.from_qasm(qasm)
-            print(cir.num_qubits, len(cir.gates))
-            ```
-        """
+        """Parse an OpenQASM program into ``CircuitIR`` by dispatching to version-specific parsers."""
         statements = CircuitAdapter._split_statements(qasm_text)
         if not statements:
             raise ValueError("Empty QASM input")
-        if not CircuitAdapter._HEADER_RE.match(statements[0]):
-            raise ValueError("Only OpenQASM 3 is supported (missing 'OPENQASM 3;' header)")
+        
+        header = statements[0]
+        if CircuitAdapter._HEADER_V2_RE.match(header):
+            return CircuitAdapter.from_qasm2(qasm_text, statements, param_bindings)
+        if CircuitAdapter._HEADER_V3_RE.match(header):
+            return CircuitAdapter.from_qasm3(qasm_text, statements, param_bindings)
+        
+        raise ValueError("Unsupported or missing OpenQASM header (only 2.0 and 3.0 are supported)")
 
+    @staticmethod
+    def from_qasm2(qasm_text: str, statements: list[str], param_bindings: dict[str, float] | None = None) -> CircuitIR:
+        """Parse OpenQASM 2.0 program."""
         qregs: dict[str, tuple[int, int]] = {}
         cregs: dict[str, tuple[int, int]] = {}
-        next_q = 0
-        next_c = 0
+        next_q, next_c = 0, 0
         gates: list[CircuitGate] = []
 
         for st in statements[1:]:
-            if st.lower().startswith("include "):
-                continue
+            if st.lower().startswith("include "): continue
 
-            qd = CircuitAdapter._DECL_QUBIT_RE.match(st)
+            # Qubit reg: qreg name[size]
+            qd = CircuitAdapter._V2_DECL_QUBIT_RE.match(st)
             if qd:
-                size = int(qd.group(1))
-                name = qd.group(2)
-                if name in qregs:
-                    raise ValueError(f"Duplicate qubit register: {name}")
+                name, size = qd.group(1), int(qd.group(2))
+                if name in qregs: raise ValueError(f"Duplicate qubit register: {name}")
                 qregs[name] = (next_q, size)
                 next_q += size
                 continue
 
-            cd = CircuitAdapter._DECL_BIT_RE.match(st)
+            # Bit reg: creg name[size]
+            cd = CircuitAdapter._V2_DECL_BIT_RE.match(st)
             if cd:
-                size = int(cd.group(1))
-                name = cd.group(2)
-                if name in cregs:
-                    raise ValueError(f"Duplicate bit register: {name}")
+                name, size = cd.group(1), int(cd.group(2))
+                if name in cregs: raise ValueError(f"Duplicate bit register: {name}")
                 cregs[name] = (next_c, size)
                 next_c += size
                 continue
 
-            mm = CircuitAdapter._MEASURE_RE.match(st)
+            # Measure: measure q[i] = c[j]
+            mm = CircuitAdapter._V2_MEASURE_RE.match(st)
             if mm:
-                qreg, qidx = mm.group(1), int(mm.group(2))
-                creg, cidx = mm.group(3), int(mm.group(4))
-                if qreg not in qregs:
-                    raise ValueError(f"Unknown qubit register in measure: {qreg}")
-                if creg not in cregs:
-                    raise ValueError(f"Unknown bit register in measure: {creg}")
+                qreg, qidx, creg, cidx = mm.group(1), int(mm.group(2)), mm.group(3), int(mm.group(4))
+                if qreg not in qregs or creg not in cregs: raise ValueError("Unknown register in measure")
                 qoff, qsize = qregs[qreg]
                 coff, csize = cregs[creg]
-                if qidx >= qsize:
-                    raise ValueError(f"Qubit index out of range: {qreg}[{qidx}]")
-                if cidx >= csize:
-                    raise ValueError(f"Bit index out of range: {creg}[{cidx}]")
+                if qidx >= qsize or cidx >= csize: raise ValueError("Index out of range in measure")
                 gates.append(CircuitGate(name="measure", qubits=[qoff + qidx], clbits=[coff + cidx]))
                 continue
 
+            # Gates
             gm = CircuitAdapter._GATE_RE.match(st)
-            if not gm:
-                raise ValueError(f"Unsupported QASM statement: '{st};'")
-            name = gm.group(1).lower()
-            params_raw = (gm.group(2) or "").strip()
-            args_raw = gm.group(3).strip()
+            if not gm: raise ValueError(f"Unsupported QASM 2.0 statement: '{st};'")
+            name, params_raw, args_raw = gm.group(1).lower(), (gm.group(2) or "").strip(), gm.group(3).strip()
+            if name == "barrier": continue
+            
             arg_tokens = [a.strip() for a in args_raw.split(",") if a.strip()]
-            if not arg_tokens:
-                raise ValueError(f"Gate statement has no qubit args: '{st};'")
-
-            # Barrier is a compiler-directive in this project: keep no timing/evolution effect.
-            if name == "barrier":
-                continue
-
-            qubits: list[int] = []
+            if not arg_tokens: raise ValueError(f"Gate has no args: '{st};'")
+            
+            qubits = []
             for tok in arg_tokens:
                 reg, idx = CircuitAdapter._parse_indexed_ref(tok)
-                if reg not in qregs:
-                    raise ValueError(f"Unknown qubit register in gate: {reg}")
+                if reg not in qregs: raise ValueError(f"Unknown qubit register: {reg}")
                 off, size = qregs[reg]
-                if idx >= size:
-                    raise ValueError(f"Qubit index out of range: {reg}[{idx}]")
+                if idx >= size: raise ValueError(f"Index out of range: {reg}[{idx}]")
                 qubits.append(off + idx)
 
-            params: list[float] = []
+            params = []
             if params_raw:
                 for val in [x.strip() for x in params_raw.split(",") if x.strip()]:
                     params.append(CircuitAdapter._eval_param_expr(val, bindings=param_bindings))
             gates.append(CircuitGate(name=name, qubits=qubits, params=params))
 
-        return CircuitIR(num_qubits=next_q, num_clbits=next_c, gates=gates, source_qasm=qasm_text)
+        return CircuitIR(
+            num_qubits=next_q,
+            num_clbits=next_c,
+            schedule=build_serial_schedule(gates, num_qubits=next_q),
+            source_qasm=qasm_text,
+        )
+
+    @staticmethod
+    def from_qasm3(qasm_text: str, statements: list[str], param_bindings: dict[str, float] | None = None) -> CircuitIR:
+        """Parse OpenQASM 3 program."""
+        qregs: dict[str, tuple[int, int]] = {}
+        cregs: dict[str, tuple[int, int]] = {}
+        next_q, next_c = 0, 0
+        gates: list[CircuitGate] = []
+
+        for st in statements[1:]:
+            if st.lower().startswith("include "): continue
+
+            # Qubit reg: qubit[size] name
+            qd = CircuitAdapter._V3_DECL_QUBIT_RE.match(st)
+            if qd:
+                size, name = int(qd.group(1)), qd.group(2)
+                if name in qregs: raise ValueError(f"Duplicate qubit register: {name}")
+                qregs[name] = (next_q, size)
+                next_q += size
+                continue
+
+            # Bit reg: bit[size] name
+            cd = CircuitAdapter._V3_DECL_BIT_RE.match(st)
+            if cd:
+                size, name = int(cd.group(1)), cd.group(2)
+                if name in cregs: raise ValueError(f"Duplicate bit register: {name}")
+                cregs[name] = (next_c, size)
+                next_c += size
+                continue
+
+            # Measure: measure q[i] -> c[j]
+            mm = CircuitAdapter._V3_MEASURE_RE.match(st)
+            if mm:
+                qreg, qidx, creg, cidx = mm.group(1), int(mm.group(2)), mm.group(3), int(mm.group(4))
+                if qreg not in qregs or creg not in cregs: raise ValueError("Unknown register in measure")
+                qoff, qsize = qregs[qreg]
+                coff, csize = cregs[creg]
+                if qidx >= qsize or cidx >= csize: raise ValueError("Index out of range in measure")
+                gates.append(CircuitGate(name="measure", qubits=[qoff + qidx], clbits=[coff + cidx]))
+                continue
+
+            # Gates
+            gm = CircuitAdapter._GATE_RE.match(st)
+            if not gm: raise ValueError(f"Unsupported QASM 3 statement: '{st};'")
+            name, params_raw, args_raw = gm.group(1).lower(), (gm.group(2) or "").strip(), gm.group(3).strip()
+            if name == "barrier": continue
+            
+            arg_tokens = [a.strip() for a in args_raw.split(",") if a.strip()]
+            if not arg_tokens: raise ValueError(f"Gate has no args: '{st};'")
+            
+            qubits = []
+            for tok in arg_tokens:
+                reg, idx = CircuitAdapter._parse_indexed_ref(tok)
+                if reg not in qregs: raise ValueError(f"Unknown qubit register: {reg}")
+                off, size = qregs[reg]
+                if idx >= size: raise ValueError(f"Index out of range: {reg}[{idx}]")
+                qubits.append(off + idx)
+
+            params = []
+            if params_raw:
+                for val in [x.strip() for x in params_raw.split(",") if x.strip()]:
+                    params.append(CircuitAdapter._eval_param_expr(val, bindings=param_bindings))
+            gates.append(CircuitGate(name=name, qubits=qubits, params=params))
+
+        return CircuitIR(
+            num_qubits=next_q,
+            num_clbits=next_c,
+            schedule=build_serial_schedule(gates, num_qubits=next_q),
+            source_qasm=qasm_text,
+        )
 
     @staticmethod
     def from_qiskit(qc: object) -> CircuitIR:
@@ -198,10 +270,45 @@ class CircuitAdapter:
         except Exception:
             source_qasm = ""
 
-        return CircuitIR(num_qubits=num_qubits, num_clbits=num_clbits, gates=gates, source_qasm=source_qasm)
+        return CircuitIR(
+            num_qubits=num_qubits,
+            num_clbits=num_clbits,
+            schedule=build_serial_schedule(gates, num_qubits=num_qubits),
+            source_qasm=source_qasm,
+        )
 
     @staticmethod
-    def to_qasm(circuit: CircuitIR) -> str:
+    def to_qasm(circuit: CircuitIR, qasm_version: str = "3.0") -> str:
+        """Serialize ``CircuitIR`` into OpenQASM text. Defaults to version 3.0."""
+        if qasm_version == "2.0":
+            return CircuitAdapter.to_qasm2(circuit)
+        return CircuitAdapter.to_qasm3(circuit)
+
+    @staticmethod
+    def to_qasm2(circuit: CircuitIR) -> str:
+        """Serialize ``CircuitIR`` into OpenQASM 2.0 text."""
+        lines = [
+            "OPENQASM 2.0;",
+            f"qreg q[{circuit.num_qubits}];",
+        ]
+        if circuit.num_clbits:
+            lines.append(f"creg c[{circuit.num_clbits}];")
+
+        for g in circuit.gates:
+            if g.name == "barrier": continue
+            qargs = ", ".join([f"q[{idx}]" for idx in g.qubits])
+            if g.name == "measure" and g.clbits:
+                lines.append(f"measure {qargs} = c[{g.clbits[0]}];")
+            else:
+                if g.params:
+                    p = ", ".join([str(x) for x in g.params])
+                    lines.append(f"{g.name}({p}) {qargs};")
+                else:
+                    lines.append(f"{g.name} {qargs};")
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def to_qasm3(circuit: CircuitIR) -> str:
         """Serialize ``CircuitIR`` into OpenQASM 3 text."""
         lines = [
             "OPENQASM 3;",
@@ -211,8 +318,7 @@ class CircuitAdapter:
             lines.append(f"bit[{circuit.num_clbits}] c;")
 
         for g in circuit.gates:
-            if g.name == "barrier":
-                continue
+            if g.name == "barrier": continue
             qargs = ", ".join([f"q[{idx}]" for idx in g.qubits])
             if g.name == "measure" and g.clbits:
                 lines.append(f"measure {qargs} -> c[{g.clbits[0]}];")

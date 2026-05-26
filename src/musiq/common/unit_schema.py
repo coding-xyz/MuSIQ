@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 PULSE_KEYS = {
+    "defaults",
+    "gates",
+    "channel_overrides",
     "gate_duration_ns",
+    "single_qubit_gate_duration_ns",
+    "double_qubit_gate_duration_ns",
     "idle_duration_ns",
     "measure_duration_ns",
     "measure_amp",
@@ -17,6 +22,8 @@ PULSE_KEYS = {
     "single_qubit_sigma_fraction",
     "single_qubit_drag_beta",
     "single_qubit_rect_edge_ns",
+    "single_qubit_gate_amp_scale",
+    "double_qubit_gate_amp_scale",
     "reset_measure_duration_ns",
     "reset_deplete_duration_ns",
     "reset_latency_duration_ns",

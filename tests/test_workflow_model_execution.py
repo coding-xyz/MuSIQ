@@ -418,6 +418,96 @@ def test_run_sample_applies_pulse_override_to_flat_runtime_pulse_dict(monkeypatc
     assert compile_calls == [{"gate_duration_ns": 15.0, "idle_duration_ns": 42.0, "xy_freq_Hz": 5.0e9}]
 
 
+def test_run_sample_applies_nested_typed_pulse_override(monkeypatch):
+    compile_calls = []
+
+    def fake_parse_compile_lower_model(**kwargs):
+        compile_calls.append(dict(kwargs.get("pulse") or {}))
+        return {"model_spec": SimpleNamespace(bound_params=dict(kwargs.get("param_bindings") or {}))}
+
+    def fake_run_engine_stage(*, model_spec, **kwargs):
+        return SimpleNamespace(engine="fake", metadata={"bound_params": dict(model_spec.bound_params)})
+
+    monkeypatch.setattr("musiq.workflow.model_execution.parse_compile_lower_model", fake_parse_compile_lower_model)
+    monkeypatch.setattr("musiq.workflow.model_execution.run_engine_stage", fake_run_engine_stage)
+    monkeypatch.setattr("musiq.workflow.model_execution.build_execution_plan", lambda task: SimpleNamespace(run_decode=False))
+
+    run_obj = ModelRun(
+        identity=RunIdentity(run_id="run_solver_0", solver_id="solver_0"),
+        runtime_task=SimpleNamespace(
+            input=SimpleNamespace(
+                qasm_text="OPENQASM 3; qubit[1] q;",
+                backend_path=None,
+                backend_config=None,
+                device_model=None,
+                device={},
+                pulse={
+                    "defaults": {"xy_carrier_freq_Hz": 5.0e9},
+                    "gates": {
+                        "rx": {
+                            "recipe_type": "rx",
+                            "duration_ns": 20.0,
+                            "amplitude_Hz": 12.5e6,
+                        }
+                    },
+                },
+                frame={},
+                analyser={},
+                study=None,
+                schedule_policy=None,
+                reset_feedback_policy=None,
+                noise={},
+                param_bindings=None,
+            ),
+            run=SimpleNamespace(
+                dt_s=None,
+                t_end_s=None,
+                t_padding_s=None,
+                seed=123,
+                mcwf_ntraj=1,
+                qutip_options={},
+                native_options={},
+                backend_options={},
+                one_over_f_components=None,
+                solver_mode="me",
+                engine="fake",
+                allow_mock_fallback=True,
+                julia_bin=None,
+                julia_depot_path=None,
+                julia_timeout_s=None,
+                prior_backend=None,
+                decoder=None,
+                decoder_options={},
+            ),
+            output=SimpleNamespace(out_dir=str(Path("tests/.tmp/run-sample-typed-pulse"))),
+        ),
+        artifacts=SimpleNamespace(model_spec=SimpleNamespace(bound_params={})),
+    )
+
+    sample = StudySample(
+        profile_id=None,
+        circuit_id="circuit_0",
+        device_id="device_0",
+        pulse_id="default",
+        solver_id="solver_0",
+        params={"pulse:gates.rx.duration_ns": 42.0},
+    )
+    run_sample(SimpleNamespace(), run_obj, sample)
+
+    assert compile_calls == [
+        {
+            "defaults": {"xy_carrier_freq_Hz": 5.0e9},
+            "gates": {
+                "rx": {
+                    "recipe_type": "rx",
+                    "duration_ns": 42.0,
+                    "amplitude_Hz": 12.5e6,
+                }
+            },
+        }
+    ]
+
+
 def test_run_sample_applies_device_override_when_runtime_device_is_plain_dict(monkeypatch):
     compile_calls = []
 
@@ -516,7 +606,7 @@ def test_run_analysis_builds_parametric_metrics_from_case_analysis_dataclass(mon
         runs={"run_0": run_obj},
         analyses={},
         config=SimpleNamespace(
-            parameter_list=SimpleNamespace(
+            parameter_sweep=SimpleNamespace(
                 parameters={
                     "pulse:idle_duration_ns": SimpleNamespace(values=[0.0, 10.0], unit="ns"),
                 }
@@ -768,7 +858,7 @@ def test_run_analysis_builds_one_case_per_study_and_one_summary_with_shot_iq(mon
         analysers={"analyser_0": analyser_cfg},
         runs={"solver_0": {"prep_0": run_ground, "prep_1": run_excited}},
         analyses={},
-        config=SimpleNamespace(parameter_list=None),
+        config=SimpleNamespace(parameter_sweep=None),
         metric_registry=None,
         device={},
         pulse={},
@@ -1007,7 +1097,7 @@ def test_run_one_solver_study_disambiguates_profiles_with_same_study_name(monkey
             pulses={"pulse_a": object()},
             solvers={"solver_0": object()},
             analysers={"analyser_0": object()},
-            parameter_list=None,
+            parameter_sweep=None,
         ),
         solvers={"solver_0": SimpleNamespace(config=SolverConfig())},
         runs={},

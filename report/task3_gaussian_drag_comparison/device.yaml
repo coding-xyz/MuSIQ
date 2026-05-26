@@ -11,7 +11,7 @@ device:
         anharmonicity_Hz: -2.0e8
       noise: 
         T1_s: 26.0e-6
-        Tphi_s: 22.0e-6
+        Tphi_s: 30.0e-6
   connections: []
   simulation_level: nlevel
   control_scale: 1.0
