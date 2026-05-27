@@ -1,5 +1,5 @@
-site_name: MuSIQ 文档
-site_description: MuSIQ 使用指南、实现 Wiki 与自动生成 API 参考
+site_name: MuSIQ Documentation
+site_description: Workflow, circuit IR, pulse schema, and API reference for MuSIQ.
 repo_name: MuSIQ
 use_directory_urls: false
 docs_dir: docs/src
@@ -7,7 +7,7 @@ site_dir: docs/site
 
 theme:
   name: material
-  language: zh
+  language: en
   features:
     - navigation.sections
     - content.code.copy
@@ -37,15 +37,15 @@ exclude_docs: |
   WIKI*.md
   schema.md
   schema_*.md
-  wiki/backend_model.md
-  wiki/circuit.md
-  wiki/noise_engine.md
 
 nav:
-  - 首页: index.md
-  - 核心架构:
-      - 系统架构: architecture.md
-      - 数据分类学: taxonomy.md
-      - 工作流指南: workflow.md
-  - API 参考:
-      - 总览: api/index.md
+  - Home: index.md
+  - Architecture:
+      - System Overview: architecture.md
+      - Data Taxonomy: taxonomy.md
+      - Workflow Guide: workflow.md
+  - Guides:
+      - Typed Pulse Schema: wiki/pulse_schema.md
+      - Schedule Circuit IR: wiki/circuit_ir.md
+  - API Reference:
+      - Overview: api/index.md

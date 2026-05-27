@@ -1,0 +1,5896 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Workflow, circuit IR, pulse schema, and API reference for MuSIQ.">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>analysis - MuSIQ Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#analysis" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../index.html" title="MuSIQ Documentation" class="md-header__button md-logo" aria-label="MuSIQ Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MuSIQ Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              analysis
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../index.html" title="MuSIQ Documentation" class="md-nav__button md-logo" aria-label="MuSIQ Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MuSIQ Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../taxonomy.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Taxonomy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflow.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wiki/pulse_schema.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Typed Pulse Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wiki/circuit_ir.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schedule Circuit IR
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#entrypoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entrypoints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package Export
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.AnalysisRegistry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisRegistry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AnalysisRegistry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.AnalysisRegistry.get_handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.AnalysisRegistry.get_revision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_revision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.AnalysisRegistry.register_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.AnalysisRunner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisRunner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.MetricRegistry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricRegistry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.final_density_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        final_density_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.state_fidelity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_fidelity
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        case
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasemetrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metrics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.metric_coherence_01" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_coherence_01
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.metric_leakage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_leakage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasemetricscoherence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.metrics.coherence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.coherence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coherence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="coherence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.coherence.metric_coherence_01" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_coherence_01
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasemetricsleakage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.metrics.leakage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.leakage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        leakage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="leakage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.leakage.metric_leakage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_leakage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasemetricspopulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.metrics.population
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.metrics.population" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        population
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasereadout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.readout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.readout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        readout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasereadoutanalysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.readout.analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.readout.analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.readout.analysis.build_readout_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_readout_analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasesingle_qubit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.single_qubit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.single_qubit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        single_qubit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscasesingle_qubitanalysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.case.single_qubit.analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.case.single_qubit.analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.single_qubit.analysis.build_single_qubit_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_single_qubit_analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.case.single_qubit.analysis.resolve_single_qubit_metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_single_qubit_metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscommon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.common
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.common" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        common
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscommonmetrics_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.common.metrics_utils
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.common.metrics_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metrics_utils
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscommonobservables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.common.observables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.common.observables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        observables
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="observables">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.observables.compute_observables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_observables
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscommonstate_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.common.state_utils
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_utils
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="state_utils">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.basis_labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        basis_labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.coherence_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coherence_series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.complex_scalar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        complex_scalar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.final_density_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        final_density_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.label_excitation_value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        label_excitation_value
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.mean_excited_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mean_excited_series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.population_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        population_series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.state_fidelity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_fidelity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.state_utils.variance_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        variance_series
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscommontrajectory_semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.common.trajectory_semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trajectory_semantics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="trajectory_semantics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.annotate_trajectory_metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        annotate_trajectory_metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.extract_p1_series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_p1_series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.infer_state_encoding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        infer_state_encoding
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.pointwise_compare_compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pointwise_compare_compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.state_channel_name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_channel_name
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.state_encoding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_encoding
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.common.trajectory_semantics.state_rows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_rows
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscomprehensive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.comprehensive
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        comprehensive
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscomprehensivemetrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.comprehensive.metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiscomprehensivemetricsreadout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.comprehensive.metrics.readout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics.readout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        readout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="readout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics.readout.compute_centroids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_centroids
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics.readout.compute_confusion_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_confusion_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics.readout.compute_iq_clouds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_iq_clouds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics.readout.compute_readout_fidelity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_readout_fidelity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.comprehensive.metrics.readout.compute_snr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_snr
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisdefinitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.definitions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.definitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        definitions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="definitions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.definitions.AnalysisStepDefinition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisStepDefinition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.definitions.collect_analysis_metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        collect_analysis_metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.definitions.get_analysis_step_definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_analysis_step_definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisdispatcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.dispatcher
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.dispatcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dispatcher
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="dispatcher">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.dispatcher.dispatch_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dispatch_analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.dispatcher.initialize_analysis_registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initialize_analysis_registry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiserror_budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.error_budget
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.error_budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        error_budget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="error_budget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.error_budget.build_report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_report
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysiserror_budget_pauli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.error_budget_pauli
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.error_budget_pauli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        error_budget_pauli
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="error_budget_pauli">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.error_budget_pauli.build_component_budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_component_budget
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.error_budget_pauli.write_component_ablation_csv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write_component_ablation_csv
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysismetrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metrics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.metrics.MetricRegistry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricRegistry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisparametric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.parametric
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.parametric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parametric
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisparametricmetrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.parametric.metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.parametric.metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisparametricmetricsterminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.parametric.metrics.terminal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.parametric.metrics.terminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        terminal
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="terminal">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.parametric.metrics.terminal.metric_final_fidelity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_final_fidelity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.parametric.metrics.terminal.metric_final_leakage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_final_leakage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.parametric.metrics.terminal.metric_final_population" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        metric_final_population
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysispasses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.passes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        passes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="passes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.passes.AnalysisPass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisPass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.passes.default_analysis_pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        default_analysis_pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysispauli_plus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.pauli_plus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.pauli_plus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pauli_plus
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pauli_plus">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.pauli_plus.build_component_error_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_component_error_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.pauli_plus.build_scaling_report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_scaling_report
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.pauli_plus.run_pauli_plus_sim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_pauli_plus_sim
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.pauli_plus.run_scaling_sweep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_scaling_sweep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisreadout_chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.readout_chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.readout_chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        readout_chain
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="readout_chain">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.readout_chain.build_iq_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_iq_analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.readout_chain.build_readout_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_readout_analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysisregistry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.registry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.AnalysisHandler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisHandler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.AnalysisRegistry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisRegistry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AnalysisRegistry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.AnalysisRegistry.get_handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.AnalysisRegistry.get_revision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_revision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.AnalysisRegistry.register_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.AnalysisRunner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisRunner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.registry.MetricRegistry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MetricRegistry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiqanalysissensitivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        musiq.analysis.sensitivity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#musiq.analysis.sensitivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sensitivity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="sensitivity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.sensitivity.build_error_budget_v2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_error_budget_v2
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.sensitivity.build_sensitivity_report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_sensitivity_report
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#musiq.analysis.sensitivity.write_sensitivity_heatmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        write_sensitivity_heatmap
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="analysis">analysis<a class="headerlink" href="#analysis" title="Permanent link">&para;</a></h1>
+<p>Analysis passes, observables, and post-processing helpers.</p>
+<h2 id="entrypoints">Entrypoints<a class="headerlink" href="#entrypoints" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>analysis.AnalysisRegistry</code></li>
+<li><code>analysis.AnalysisRunner</code></li>
+</ul>
+<h2 id="package-export">Package Export<a class="headerlink" href="#package-export" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis" class="doc doc-heading">
+            <code>musiq.analysis</code>
+
+
+<a href="#musiq.analysis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Analysis public API.</p>
+<p>This package currently exposes registry-oriented helpers for running analysis
+steps and managing analysis implementations.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.AnalysisRegistry" class="doc doc-heading">
+            <code>AnalysisRegistry</code>
+
+
+<a href="#musiq.analysis.AnalysisRegistry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Registry for hierarchical analysis kinds.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="musiq.analysis.AnalysisRegistry.get_handler" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_handler</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.AnalysisRegistry.get_handler" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Fetch the handler for a specific level and kind.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="musiq.analysis.AnalysisRegistry.get_revision" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_revision</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.AnalysisRegistry.get_revision" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Fetch the revision ID for a specific kind.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="musiq.analysis.AnalysisRegistry.register_kind" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">register_kind</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="n">handler</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.AnalysisRegistry.register_kind" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Register an analysis kind and return its revision ID.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.AnalysisRunner" class="doc doc-heading">
+            <code>AnalysisRunner</code>
+
+
+<a href="#musiq.analysis.AnalysisRunner" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Compatibility wrapper around the hierarchical registry.</p>
+<p>Older callers expect a runner object with a <code>run</code> method. Keep a minimal
+implementation here so imports and simple call sites continue to work while
+analysis dispatch migrates to <code>dispatcher.dispatch_analysis</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.MetricRegistry" class="doc doc-heading">
+            <code>MetricRegistry</code>
+
+
+<a href="#musiq.analysis.MetricRegistry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Registry for named analyser metrics.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.final_density_matrix" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">final_density_matrix</span><span class="p">(</span><span class="n">source</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.final_density_matrix" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the final density matrix from a trajectory-like object.</p>
+<p><code>source</code> may be a <code>Trajectory</code>, a solver-run bundle with a <code>trajectory</code>
+attribute, or a <code>Model</code> containing <code>runs</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.state_fidelity" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">state_fidelity</span><span class="p">(</span><span class="n">rho</span><span class="p">,</span> <span class="n">psi</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.state_fidelity" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute pure-state fidelity <code>&lt;psi|rho|psi&gt;</code>.</p>
+<p>The state vector is normalized defensively. If <code>rho</code> is larger than the
+target vector, the top-left computational subspace with matching dimension
+is used.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="modules">Modules<a class="headerlink" href="#modules" title="Permanent link">&para;</a></h2>
+<h2 id="musiqanalysiscase"><code>musiq.analysis.case</code><a class="headerlink" href="#musiqanalysiscase" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case" class="doc doc-heading">
+            <code>musiq.analysis.case</code>
+
+
+<a href="#musiq.analysis.case" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Case-level analysis package.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasemetrics"><code>musiq.analysis.case.metrics</code><a class="headerlink" href="#musiqanalysiscasemetrics" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.metrics" class="doc doc-heading">
+            <code>musiq.analysis.case.metrics</code>
+
+
+<a href="#musiq.analysis.case.metrics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Case-level metric calculators for single-run trajectory analysis.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.metrics.metric_coherence_01" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_coherence_01</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.metrics.metric_coherence_01" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the coherence (magnitude of rho_01) between states |0&gt; and |1&gt;.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.metrics.metric_leakage" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_leakage</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.metrics.metric_leakage" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute population leakage outside the computational subspace {|0&gt;, |1&gt;}.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasemetricscoherence"><code>musiq.analysis.case.metrics.coherence</code><a class="headerlink" href="#musiqanalysiscasemetricscoherence" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.metrics.coherence" class="doc doc-heading">
+            <code>musiq.analysis.case.metrics.coherence</code>
+
+
+<a href="#musiq.analysis.case.metrics.coherence" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Coherence-based metrics for quantum states.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.metrics.coherence.metric_coherence_01" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_coherence_01</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.metrics.coherence.metric_coherence_01" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the coherence (magnitude of rho_01) between states |0&gt; and |1&gt;.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasemetricsleakage"><code>musiq.analysis.case.metrics.leakage</code><a class="headerlink" href="#musiqanalysiscasemetricsleakage" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.metrics.leakage" class="doc doc-heading">
+            <code>musiq.analysis.case.metrics.leakage</code>
+
+
+<a href="#musiq.analysis.case.metrics.leakage" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Leakage-based metrics for quantum states.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.metrics.leakage.metric_leakage" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_leakage</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.metrics.leakage.metric_leakage" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute population leakage outside the computational subspace {|0&gt;, |1&gt;}.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasemetricspopulation"><code>musiq.analysis.case.metrics.population</code><a class="headerlink" href="#musiqanalysiscasemetricspopulation" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.metrics.population" class="doc doc-heading">
+            <code>musiq.analysis.case.metrics.population</code>
+
+
+<a href="#musiq.analysis.case.metrics.population" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Population-based metrics for quantum states.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasereadout"><code>musiq.analysis.case.readout</code><a class="headerlink" href="#musiqanalysiscasereadout" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.readout" class="doc doc-heading">
+            <code>musiq.analysis.case.readout</code>
+
+
+<a href="#musiq.analysis.case.readout" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Case-level readout analysis package.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasereadoutanalysis"><code>musiq.analysis.case.readout.analysis</code><a class="headerlink" href="#musiqanalysiscasereadoutanalysis" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.readout.analysis" class="doc doc-heading">
+            <code>musiq.analysis.case.readout.analysis</code>
+
+
+<a href="#musiq.analysis.case.readout.analysis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Analysis implementation for CASE.Readout.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.readout.analysis.build_readout_analysis" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_readout_analysis</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">pulse_ir</span><span class="p">,</span> <span class="n">pulse_cfg</span><span class="p">,</span> <span class="n">device_cfg</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.readout.analysis.build_readout_analysis" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build Case-level readout analysis.
+Responsibility: Signal chain reconstruction and IQ point integration for a single trajectory.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasesingle_qubit"><code>musiq.analysis.case.single_qubit</code><a class="headerlink" href="#musiqanalysiscasesingle_qubit" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.single_qubit" class="doc doc-heading">
+            <code>musiq.analysis.case.single_qubit</code>
+
+
+<a href="#musiq.analysis.case.single_qubit" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Case-level single-qubit analysis package.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscasesingle_qubitanalysis"><code>musiq.analysis.case.single_qubit.analysis</code><a class="headerlink" href="#musiqanalysiscasesingle_qubitanalysis" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.case.single_qubit.analysis" class="doc doc-heading">
+            <code>musiq.analysis.case.single_qubit.analysis</code>
+
+
+<a href="#musiq.analysis.case.single_qubit.analysis" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Analysis implementation for CASE.SingleQubit.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.single_qubit.analysis.build_single_qubit_analysis" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_single_qubit_analysis</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.single_qubit.analysis.build_single_qubit_analysis" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compatibility wrapper for CASE.SingleQubit dispatch.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.case.single_qubit.analysis.resolve_single_qubit_metrics" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">resolve_single_qubit_metrics</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">requested_metrics</span><span class="p">,</span> <span class="n">initial_observables</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.case.single_qubit.analysis.resolve_single_qubit_metrics" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Resolve metrics specific to single-qubit state analysis.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>trajectory</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Trajectory
+
+
+  
+      dataclass
+   (musiq.common.schemas.Trajectory)" href="common.html#musiq.common.schemas.Trajectory">Trajectory</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The input trajectory.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>model_spec</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ModelSpec
+
+
+  
+      dataclass
+   (musiq.common.schemas.ModelSpec)" href="common.html#musiq.common.schemas.ModelSpec">ModelSpec</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The model specification for basis/system info.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>requested_metrics</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>List of metric names to compute.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>initial_observables</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Starting observables to be updated.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="dict">dict</span>[<span title="str">str</span>, <a class="autorefs autorefs-internal" title="MetricSeries
+
+
+  
+      dataclass
+   (musiq.schemas.results.MetricSeries)" href="schemas.html#musiq.schemas.results.MetricSeries">MetricSeries</a>], <span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>], <a class="autorefs autorefs-internal" title="Report
+
+
+  
+      dataclass
+   (musiq.common.schemas.Report)" href="common.html#musiq.common.schemas.Report">Report</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A tuple of (metric_items, updated_observables, report).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscommon"><code>musiq.analysis.common</code><a class="headerlink" href="#musiqanalysiscommon" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.common" class="doc doc-heading">
+            <code>musiq.analysis.common</code>
+
+
+<a href="#musiq.analysis.common" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Shared analysis helpers.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscommonmetrics_utils"><code>musiq.analysis.common.metrics_utils</code><a class="headerlink" href="#musiqanalysiscommonmetrics_utils" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.common.metrics_utils" class="doc doc-heading">
+            <code>musiq.analysis.common.metrics_utils</code>
+
+
+<a href="#musiq.analysis.common.metrics_utils" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Shared utilities for metric computation.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscommonobservables"><code>musiq.analysis.common.observables</code><a class="headerlink" href="#musiqanalysiscommonobservables" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.common.observables" class="doc doc-heading">
+            <code>musiq.analysis.common.observables</code>
+
+
+<a href="#musiq.analysis.common.observables" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Observable extraction helpers for simulation traces.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.observables.compute_observables" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">compute_observables</span><span class="p">(</span><span class="n">trajectory</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.observables.compute_observables" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute summary observables from a simulation Trajectory.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>trajectory</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Trajectory
+
+
+  
+      dataclass
+   (musiq.common.schemas.Trajectory)" href="common.html#musiq.common.schemas.Trajectory">Trajectory</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Time-ordered state/population samples produced by an engine.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>Observables</code> containing summary scalars used by downstream reports.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Common keys include <code>samples</code>, <code>final_p0</code>, <code>final_p1</code>, and</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>mean_excited</code> when the Trajectory encoding is known. For traces marked as</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>basis populations or ambiguous population vectors, only semantically</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>safe fields are emitted.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscommonstate_utils"><code>musiq.analysis.common.state_utils</code><a class="headerlink" href="#musiqanalysiscommonstate_utils" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.common.state_utils" class="doc doc-heading">
+            <code>musiq.analysis.common.state_utils</code>
+
+
+<a href="#musiq.analysis.common.state_utils" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Small quantum-state helpers for notebook and workflow analysis.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.basis_labels" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">basis_labels</span><span class="p">(</span><span class="n">dimension</span><span class="p">,</span> <span class="n">num_qubits</span><span class="p">,</span> <span class="n">levels</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.basis_labels" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Generate basis labels for a given Hilbert space dimension.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.coherence_series" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">coherence_series</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">state_a</span><span class="o">=</span><span class="s1">&#39;0&#39;</span><span class="p">,</span> <span class="n">state_b</span><span class="o">=</span><span class="s1">&#39;1&#39;</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.coherence_series" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract the magnitude of the coherence between two states as a time series.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.complex_scalar" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">complex_scalar</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.complex_scalar" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Safely coerce a value to a complex scalar.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.final_density_matrix" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">final_density_matrix</span><span class="p">(</span><span class="n">source</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.final_density_matrix" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the final density matrix from a trajectory-like object.</p>
+<p><code>source</code> may be a <code>Trajectory</code>, a solver-run bundle with a <code>trajectory</code>
+attribute, or a <code>Model</code> containing <code>runs</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.label_excitation_value" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">label_excitation_value</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">num_qubits</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.label_excitation_value" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the average excitation level from a basis label.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.mean_excited_series" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">mean_excited_series</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.mean_excited_series" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the mean excitation level as a time series.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.population_series" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">population_series</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.population_series" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract population time-series for all basis states.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.state_fidelity" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">state_fidelity</span><span class="p">(</span><span class="n">rho</span><span class="p">,</span> <span class="n">psi</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.state_fidelity" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute pure-state fidelity <code>&lt;psi|rho|psi&gt;</code>.</p>
+<p>The state vector is normalized defensively. If <code>rho</code> is larger than the
+target vector, the top-left computational subspace with matching dimension
+is used.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.state_utils.variance_series" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">variance_series</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.state_utils.variance_series" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the variance of excitations as a time series.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscommontrajectory_semantics"><code>musiq.analysis.common.trajectory_semantics</code><a class="headerlink" href="#musiqanalysiscommontrajectory_semantics" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.common.trajectory_semantics" class="doc doc-heading">
+            <code>musiq.analysis.common.trajectory_semantics</code>
+
+
+<a href="#musiq.analysis.common.trajectory_semantics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Helpers for annotating and reasoning about Trajectory state semantics.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.annotate_trajectory_metadata" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">annotate_trajectory_metadata</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">num_qubits</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dimension</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">engine_name</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.annotate_trajectory_metadata" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Attach canonical state semantics metadata to a Trajectory in-place.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.extract_p1_series" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract_p1_series</span><span class="p">(</span><span class="n">trajectory</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.extract_p1_series" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract a semantically safe single-qubit <code>p1(t)</code> series from a trajectory.</p>
+<p>Supported encodings:
+- <code>per_qubit_excited_probability</code>: use <code>row[0]</code> for single-qubit case.
+- <code>basis_population_single_qubit</code>: use <code>row[1]</code>.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A list of <code>p1</code> values aligned with <code>trajectory.times</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the trajectory encoding cannot be safely interpreted as a
+single-qubit p1(t) series.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.infer_state_encoding" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">infer_state_encoding</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">num_qubits</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dimension</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">engine_name</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.infer_state_encoding" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Infer a safe, explicit state encoding label for a Trajectory.</p>
+<p>The labels intentionally prefer <code>ambiguous_*</code> over aggressive guesses when
+multiple interpretations are plausible.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.pointwise_compare_compatibility" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">pointwise_compare_compatibility</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.pointwise_compare_compatibility" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return whether two traces support pointwise numeric comparison.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.state_channel_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">state_channel_name</span><span class="p">(</span><span class="n">trajectory</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.state_channel_name" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the canonical primary classical state-like channel name.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.state_encoding" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">state_encoding</span><span class="p">(</span><span class="n">trajectory</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.state_encoding" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the canonical state encoding for a trajectory.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.common.trajectory_semantics.state_rows" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">state_rows</span><span class="p">(</span><span class="n">trajectory</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.common.trajectory_semantics.state_rows" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the primary classical state-like trajectory rows.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscomprehensive"><code>musiq.analysis.comprehensive</code><a class="headerlink" href="#musiqanalysiscomprehensive" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.comprehensive" class="doc doc-heading">
+            <code>musiq.analysis.comprehensive</code>
+
+
+<a href="#musiq.analysis.comprehensive" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Comprehensive-level analysis package.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscomprehensivemetrics"><code>musiq.analysis.comprehensive.metrics</code><a class="headerlink" href="#musiqanalysiscomprehensivemetrics" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.comprehensive.metrics" class="doc doc-heading">
+            <code>musiq.analysis.comprehensive.metrics</code>
+
+
+<a href="#musiq.analysis.comprehensive.metrics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiscomprehensivemetricsreadout"><code>musiq.analysis.comprehensive.metrics.readout</code><a class="headerlink" href="#musiqanalysiscomprehensivemetricsreadout" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.comprehensive.metrics.readout" class="doc doc-heading">
+            <code>musiq.analysis.comprehensive.metrics.readout</code>
+
+
+<a href="#musiq.analysis.comprehensive.metrics.readout" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Comprehensive readout metrics operating on collections of trajectories.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.comprehensive.metrics.readout.compute_centroids" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">compute_centroids</span><span class="p">(</span><span class="n">iq_clouds</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.comprehensive.metrics.readout.compute_centroids" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the centroid (mean I, Q) for each state cloud.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.comprehensive.metrics.readout.compute_confusion_matrix" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">compute_confusion_matrix</span><span class="p">(</span><span class="n">trajectories</span><span class="p">,</span> <span class="n">centroids</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.comprehensive.metrics.readout.compute_confusion_matrix" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the state confusion matrix based on nearest-centroid assignment.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.comprehensive.metrics.readout.compute_iq_clouds" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">compute_iq_clouds</span><span class="p">(</span><span class="n">trajectories</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.comprehensive.metrics.readout.compute_iq_clouds" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Aggregate IQ clouds for all states across all trajectories.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.comprehensive.metrics.readout.compute_readout_fidelity" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">compute_readout_fidelity</span><span class="p">(</span><span class="n">confusion_matrix</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.comprehensive.metrics.readout.compute_readout_fidelity" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute overall readout fidelity as the average of diagonal elements.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.comprehensive.metrics.readout.compute_snr" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">compute_snr</span><span class="p">(</span><span class="n">iq_clouds</span><span class="p">,</span> <span class="n">centroids</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.comprehensive.metrics.readout.compute_snr" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute SNR as the distance between centroids divided by the average spread.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisdefinitions"><code>musiq.analysis.definitions</code><a class="headerlink" href="#musiqanalysisdefinitions" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.definitions" class="doc doc-heading">
+            <code>musiq.analysis.definitions</code>
+
+
+<a href="#musiq.analysis.definitions" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Central analysis-step definitions and metric request helpers.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.definitions.AnalysisStepDefinition" class="doc doc-heading">
+            <code>AnalysisStepDefinition</code>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#musiq.analysis.definitions.AnalysisStepDefinition" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Declarative description of one supported analysis step.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.definitions.collect_analysis_metrics" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">collect_analysis_metrics</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">metric_source</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.definitions.collect_analysis_metrics" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Collect requested metrics from hierarchical analysis steps.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.definitions.get_analysis_step_definition" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_analysis_step_definition</span><span class="p">(</span><span class="n">name</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.definitions.get_analysis_step_definition" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return the normalized analysis-step definition for one step name.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisdispatcher"><code>musiq.analysis.dispatcher</code><a class="headerlink" href="#musiqanalysisdispatcher" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.dispatcher" class="doc doc-heading">
+            <code>musiq.analysis.dispatcher</code>
+
+
+<a href="#musiq.analysis.dispatcher" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Dispatcher for hierarchical analysis kinds.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.dispatcher.dispatch_analysis" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">dispatch_analysis</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.dispatcher.dispatch_analysis" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Dispatch analysis request to the appropriate handler based on level and kind.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>level</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>String representation of AnalysisLevel (e.g., "CASE").</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>kind</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>String representation of AnalysisKind (e.g., "READOUT").</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>**kwargs</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Arguments passed to the handler.</p>
+              </div>
+            </td>
+            <td>
+                  <code>{}</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The result of the analysis handler.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.dispatcher.initialize_analysis_registry" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">initialize_analysis_registry</span><span class="p">()</span></code>
+
+<a href="#musiq.analysis.dispatcher.initialize_analysis_registry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Register all known analysis handlers.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiserror_budget"><code>musiq.analysis.error_budget</code><a class="headerlink" href="#musiqanalysiserror_budget" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.error_budget" class="doc doc-heading">
+            <code>musiq.analysis.error_budget</code>
+
+
+<a href="#musiq.analysis.error_budget" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Legacy error-budget report builders for simulation observables.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.error_budget.build_report" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_report</span><span class="p">(</span><span class="n">observables</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.error_budget.build_report" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build a lightweight error-budget report from observables.</p>
+<p>The current model is heuristic and deterministic. It is intended as a
+stable baseline for regression checks before introducing richer physical
+decomposition models.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>observables</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Aggregated observables from a simulation Trajectory.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Report
+
+
+  
+      dataclass
+   (musiq.common.schemas.Report)" href="common.html#musiq.common.schemas.Report">Report</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A <code>Report</code> with:</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Report
+
+
+  
+      dataclass
+   (musiq.common.schemas.Report)" href="common.html#musiq.common.schemas.Report">Report</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <ul>
+<li><code>summary</code>: high-level status and fidelity proxy.</li>
+</ul>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Report
+
+
+  
+      dataclass
+   (musiq.common.schemas.Report)" href="common.html#musiq.common.schemas.Report">Report</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <ul>
+<li><code>error_budget</code>: dephasing/leakage-like terms in <code>[0, 1]</code>.</li>
+</ul>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysiserror_budget_pauli"><code>musiq.analysis.error_budget_pauli</code><a class="headerlink" href="#musiqanalysiserror_budget_pauli" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.error_budget_pauli" class="doc doc-heading">
+            <code>musiq.analysis.error_budget_pauli</code>
+
+
+<a href="#musiq.analysis.error_budget_pauli" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Pauli-plus error-budget aggregation and ablation export helpers.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.error_budget_pauli.build_component_budget" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_component_budget</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">baseline_scaling</span><span class="p">,</span> <span class="n">component_model</span><span class="p">,</span> <span class="n">ablation_scaling</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.error_budget_pauli.build_component_budget" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build Pauli+ component error budget from baseline vs component-off ablations.</p>
+<p>Contribution for each component is defined as:
+<code>delta_inverse_lambda = (1/lambda_baseline) - (1/lambda_component_off)</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.error_budget_pauli.write_component_ablation_csv" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">write_component_ablation_csv</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">component_model</span><span class="p">,</span> <span class="n">budget</span><span class="p">,</span> <span class="n">out_path</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.error_budget_pauli.write_component_ablation_csv" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Write component-level ablation table for quick inspection/export.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysismetrics"><code>musiq.analysis.metrics</code><a class="headerlink" href="#musiqanalysismetrics" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.metrics" class="doc doc-heading">
+            <code>musiq.analysis.metrics</code>
+
+
+<a href="#musiq.analysis.metrics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Central hub for resolving and registering analysis metrics across different levels.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.metrics.MetricRegistry" class="doc doc-heading">
+            <code>MetricRegistry</code>
+
+
+<a href="#musiq.analysis.metrics.MetricRegistry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Registry for named analyser metrics.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisparametric"><code>musiq.analysis.parametric</code><a class="headerlink" href="#musiqanalysisparametric" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.parametric" class="doc doc-heading">
+            <code>musiq.analysis.parametric</code>
+
+
+<a href="#musiq.analysis.parametric" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Parametric-level analysis package.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisparametricmetrics"><code>musiq.analysis.parametric.metrics</code><a class="headerlink" href="#musiqanalysisparametricmetrics" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.parametric.metrics" class="doc doc-heading">
+            <code>musiq.analysis.parametric.metrics</code>
+
+
+<a href="#musiq.analysis.parametric.metrics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Parametric-level metrics for quantum analysis.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisparametricmetricsterminal"><code>musiq.analysis.parametric.metrics.terminal</code><a class="headerlink" href="#musiqanalysisparametricmetricsterminal" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.parametric.metrics.terminal" class="doc doc-heading">
+            <code>musiq.analysis.parametric.metrics.terminal</code>
+
+
+<a href="#musiq.analysis.parametric.metrics.terminal" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Parametric metrics that extract terminal values from case-level analysis.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.parametric.metrics.terminal.metric_final_fidelity" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_final_fidelity</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.parametric.metrics.terminal.metric_final_fidelity" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract terminal fidelity. 
+Typically defined as P1 for a target |1&gt; state.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.parametric.metrics.terminal.metric_final_leakage" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_final_leakage</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.parametric.metrics.terminal.metric_final_leakage" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract the terminal leakage value.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.parametric.metrics.terminal.metric_final_population" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">metric_final_population</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">metric_cfg</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.parametric.metrics.terminal.metric_final_population" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract final population values. cfg can specify 'label' (e.g. '1').</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysispasses"><code>musiq.analysis.passes</code><a class="headerlink" href="#musiqanalysispasses" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.passes" class="doc doc-heading">
+            <code>musiq.analysis.passes</code>
+
+
+<a href="#musiq.analysis.passes" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Composable analysis-pass helpers used by the workflow runner.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.passes.AnalysisPass" class="doc doc-heading">
+            <code>AnalysisPass</code>
+
+
+<a href="#musiq.analysis.passes.AnalysisPass" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+
+
+
+        <p>Callable protocol for analysis pass implementation.</p>
+<p>An analysis pass consumes <code>Trajectory</code> + <code>ModelSpec</code> and returns a plain
+dictionary payload that can be serialized by the workflow layer.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.passes.default_analysis_pass" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">default_analysis_pass</span><span class="p">(</span><span class="n">Trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.passes.default_analysis_pass" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run built-in observables and error-budget analysis.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>Trajectory</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Trajectory
+
+
+  
+      dataclass
+   (musiq.common.schemas.Trajectory)" href="common.html#musiq.common.schemas.Trajectory">Trajectory</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Engine Trajectory samples.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>model_spec</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ModelSpec
+
+
+  
+      dataclass
+   (musiq.common.schemas.ModelSpec)" href="common.html#musiq.common.schemas.ModelSpec">ModelSpec</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Executable model configuration. Included for compatibility
+with custom passes, even though the default pass does not use it.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A dictionary with <code>observables</code> and <code>report</code> entries.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysispauli_plus"><code>musiq.analysis.pauli_plus</code><a class="headerlink" href="#musiqanalysispauli_plus" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.pauli_plus" class="doc doc-heading">
+            <code>musiq.analysis.pauli_plus</code>
+
+
+<a href="#musiq.analysis.pauli_plus" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Pauli-plus component modeling and scaling sweep helpers.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.pauli_plus.build_component_error_model" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_component_error_model</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">logical_x</span><span class="p">,</span> <span class="n">logical_z</span><span class="p">,</span> <span class="n">mean_excited</span><span class="p">,</span> <span class="n">final_p1</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.pauli_plus.build_component_error_model" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build component-level error seeds from current run metrics.</p>
+<p>This is a bridge model for offline analysis. It converts available workflow
+observables/logical-error summaries into component bins expected by Pauli+
+scaling and ablation routines.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.pauli_plus.build_scaling_report" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_scaling_report</span><span class="p">(</span><span class="n">epsilon_by_d</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.pauli_plus.build_scaling_report" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build scaling report with Lambda3/5 from epsilon-by-distance results.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.pauli_plus.run_pauli_plus_sim" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">run_pauli_plus_sim</span><span class="p">(</span><span class="n">model_spec</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">qec_engine</span><span class="p">,</span> <span class="n">code_distance</span><span class="p">,</span> <span class="n">shots</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.pauli_plus.run_pauli_plus_sim" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run one code-distance Pauli+ simulation through selected engine.</p>
+<p>For <code>qec_engine='auto'</code>, this function tries Stim first and falls back to
+Cirq if Stim returns fallback quality.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.pauli_plus.run_scaling_sweep" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">run_scaling_sweep</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">qec_engine</span><span class="p">,</span> <span class="n">component_errors</span><span class="p">,</span> <span class="n">code_distances</span><span class="p">,</span> <span class="n">shots</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.pauli_plus.run_scaling_sweep" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Run Pauli+ simulations across code distances and return scaling report.</p>
+<p>Includes run-level backend quality statistics:
+<code>native_runs</code>, <code>fallback_runs</code>, <code>native_runs_ratio</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisreadout_chain"><code>musiq.analysis.readout_chain</code><a class="headerlink" href="#musiqanalysisreadout_chain" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.readout_chain" class="doc doc-heading">
+            <code>musiq.analysis.readout_chain</code>
+
+
+<a href="#musiq.analysis.readout_chain" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Readout-chain postprocessing for cqed task flows.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.readout_chain.build_iq_analysis" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_iq_analysis</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">case_results</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.readout_chain.build_iq_analysis" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build Comprehensive-level IQ analysis.
+Responsibility: Aggregate case results to compute centroids, clouds, and fidelity.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.readout_chain.build_readout_analysis" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_readout_analysis</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">trajectory</span><span class="p">,</span> <span class="n">model_spec</span><span class="p">,</span> <span class="n">pulse_ir</span><span class="p">,</span> <span class="n">pulse_cfg</span><span class="p">,</span> <span class="n">device_cfg</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.readout_chain.build_readout_analysis" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build Case-level readout analysis.
+Responsibility: Signal chain reconstruction and IQ point integration for a single trajectory.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysisregistry"><code>musiq.analysis.registry</code><a class="headerlink" href="#musiqanalysisregistry" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.registry" class="doc doc-heading">
+            <code>musiq.analysis.registry</code>
+
+
+<a href="#musiq.analysis.registry" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Analysis pass and metric registry orchestration.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.registry.AnalysisHandler" class="doc doc-heading">
+            <code>AnalysisHandler</code>
+
+
+<a href="#musiq.analysis.registry.AnalysisHandler" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+
+
+
+        <p>Protocol for a handler that can execute a specific kind of analysis.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.registry.AnalysisRegistry" class="doc doc-heading">
+            <code>AnalysisRegistry</code>
+
+
+<a href="#musiq.analysis.registry.AnalysisRegistry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Registry for hierarchical analysis kinds.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="musiq.analysis.registry.AnalysisRegistry.get_handler" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_handler</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.registry.AnalysisRegistry.get_handler" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Fetch the handler for a specific level and kind.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="musiq.analysis.registry.AnalysisRegistry.get_revision" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">get_revision</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.registry.AnalysisRegistry.get_revision" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Fetch the revision ID for a specific kind.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="musiq.analysis.registry.AnalysisRegistry.register_kind" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">register_kind</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="n">handler</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.registry.AnalysisRegistry.register_kind" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Register an analysis kind and return its revision ID.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.registry.AnalysisRunner" class="doc doc-heading">
+            <code>AnalysisRunner</code>
+
+
+<a href="#musiq.analysis.registry.AnalysisRunner" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Compatibility wrapper around the hierarchical registry.</p>
+<p>Older callers expect a runner object with a <code>run</code> method. Keep a minimal
+implementation here so imports and simple call sites continue to work while
+analysis dispatch migrates to <code>dispatcher.dispatch_analysis</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="musiq.analysis.registry.MetricRegistry" class="doc doc-heading">
+            <code>MetricRegistry</code>
+
+
+<a href="#musiq.analysis.registry.MetricRegistry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Registry for named analyser metrics.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="musiqanalysissensitivity"><code>musiq.analysis.sensitivity</code><a class="headerlink" href="#musiqanalysissensitivity" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="musiq.analysis.sensitivity" class="doc doc-heading">
+            <code>musiq.analysis.sensitivity</code>
+
+
+<a href="#musiq.analysis.sensitivity" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Sensitivity report builders and heatmap export helpers.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.sensitivity.build_error_budget_v2" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_error_budget_v2</span><span class="p">(</span><span class="n">observables</span><span class="p">,</span> <span class="n">logical_error</span><span class="p">,</span> <span class="n">sensitivity_report</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.sensitivity.build_error_budget_v2" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build an expanded error budget from sensitivity/logical-error metrics.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>observables</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Observables used for readout-like proxy terms.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>logical_error</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="LogicalErrorSummary
+
+
+  
+      dataclass
+   (musiq.common.schemas.LogicalErrorSummary)" href="common.html#musiq.common.schemas.LogicalErrorSummary">LogicalErrorSummary</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Logical error summary used for base rates.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sensitivity_report</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Output from <code>build_sensitivity_report</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A JSON-serializable v2 error budget with ranked contribution terms.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.sensitivity.build_sensitivity_report" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_sensitivity_report</span><span class="p">(</span><span class="n">observables</span><span class="p">,</span> <span class="n">logical_error</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">sweep</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.sensitivity.build_sensitivity_report" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build deterministic sensitivity summary for P1-M4.</p>
+<p>This version uses a stable proxy model to estimate local sensitivities
+from current run metrics. It favors reproducibility over physical
+completeness and is suited for ranking and regression tracking.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>observables</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Observables
+
+
+  
+      dataclass
+   (musiq.common.schemas.Observables)" href="common.html#musiq.common.schemas.Observables">Observables</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Aggregated observables from simulation outputs.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>logical_error</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="LogicalErrorSummary
+
+
+  
+      dataclass
+   (musiq.common.schemas.LogicalErrorSummary)" href="common.html#musiq.common.schemas.LogicalErrorSummary">LogicalErrorSummary</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Logical error summary from decoder outputs.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>seed</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Run seed recorded for reproducibility.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sweep</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="dict">dict</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional declared sweep configuration from backend settings.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A JSON-serializable dict with baseline metrics, local sensitivities,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>ranking, and declared sweep dimensions.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="musiq.analysis.sensitivity.write_sensitivity_heatmap" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">write_sensitivity_heatmap</span><span class="p">(</span><span class="n">sensitivity_report</span><span class="p">,</span> <span class="n">out_path</span><span class="p">)</span></code>
+
+<a href="#musiq.analysis.sensitivity.write_sensitivity_heatmap" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Render a compact heatmap for local sensitivity ranking.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -47,7 +47,7 @@ XY_RE = re.compile(r"^XY_(\d+)$", re.IGNORECASE)
 Z_RE = re.compile(r"^Z_(\d+)$", re.IGNORECASE)
 RO_RE = re.compile(r"^RO_(\d+)$", re.IGNORECASE)
 TC_RE = re.compile(r"^TC_(\d+)$", re.IGNORECASE)
-TC_PAIR_RE = re.compile(r"^TC_q(\d+)_q(\d+)$", re.IGNORECASE)
+TC_PAIR_RE = re.compile(r"^TC_(\d+)_(\d+)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)

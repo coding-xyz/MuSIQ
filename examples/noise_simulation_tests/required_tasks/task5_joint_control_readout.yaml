@@ -17,8 +17,9 @@ cases:
     device:
       control_scale: 0.9
     pulse:
-      measure_duration_ns: 60.0
-      gate_duration_ns: 20.0
+      defaults:
+        measure_duration_ns: 60.0
+        gate_duration_ns: 20.0
     noise:
       - id: q0_ou_nominal
         kind: ou
@@ -32,8 +33,9 @@ cases:
     device:
       control_scale: 1.25
     pulse:
-      measure_duration_ns: 120.0
-      gate_duration_ns: 30.0
+      defaults:
+        measure_duration_ns: 120.0
+        gate_duration_ns: 30.0
     noise:
       - id: q0_ou_stressed
         kind: ou

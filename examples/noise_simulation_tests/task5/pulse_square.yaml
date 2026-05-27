@@ -1,6 +1,25 @@
 schema_version: "1.0"
 pulse:
-  gate_duration_ns: 16.0
-  xy_freq_Hz: 5000000000.0
-  single_qubit_shape: rect
-  single_qubit_rect_edge_ns: 2.0
+  defaults:
+    xy_carrier_freq_Hz: 5.0e9
+    schedule_policy: serial
+
+  gates:
+    x:
+      recipe_type: x
+      shape: rect
+      duration_ns: 16.0
+      amplitude_Hz: 15.625e6
+      carrier_freq_Hz: 5.0e9
+      edge_ns: 2.0
+
+    sx:
+      recipe_type: sx
+      shape: rect
+      duration_ns: 16.0
+      amplitude_Hz: 7.8125e6
+      carrier_freq_Hz: 5.0e9
+      edge_ns: 2.0
+
+    virtual_z:
+      recipe_type: virtual_z

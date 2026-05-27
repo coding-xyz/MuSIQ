@@ -11,7 +11,8 @@ from musiq.backend.model.lowering import lower_couplings
 from musiq.schemas.connections import SystemConnectionSpec
 from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.ui.cli import build_parser
-from musiq.workflow import ProfileConfig, create_model, load_model
+from musiq.workflow import CircuitConfig, ProfileConfig, create_model, load_model
+from musiq.workflow.contracts import filter_composite_device_for_step
 from musiq.workflow.task_io import (
     load_analyser_config_file,
     load_circuit_config_file,
@@ -167,6 +168,29 @@ def test_load_circuit_config_file_reads_schedule_yaml(tmp_path: Path):
     assert circuit.circuit_ir.schedule[1][2][0].name == "cz"
 
 
+def test_circuit_config_helper_reads_pure_schedule_yaml(tmp_path: Path):
+    schedule_only = {
+        "0": [
+            [["sx", [0]]],
+            [],
+        ],
+        "1": [
+            [["cz", [0, 1]]],
+            [["cz", [0, 1]]],
+        ],
+    }
+    cfg_path = tmp_path / "schedule_only.yaml"
+    cfg_path.write_text(json.dumps(schedule_only, ensure_ascii=False), encoding="utf-8")
+
+    circuit = CircuitConfig.from_schedule_file(cfg_path)
+
+    assert circuit.qasm_text is None
+    assert circuit.circuit_ir is not None
+    assert circuit.circuit_ir.num_qubits == 2
+    assert circuit.circuit_ir.schedule[0][0][0].name == "sx"
+    assert circuit.circuit_ir.schedule[1][1][0].qubits == [0, 1]
+
+
 def test_load_pulse_config_file_reads_typed_schema(tmp_path: Path):
     pulse_path = tmp_path / "pulse.yaml"
     pulse_path.write_text(json.dumps(_typed_pulse_payload(measure_amp=1.2), ensure_ascii=False), encoding="utf-8")
@@ -178,6 +202,48 @@ def test_load_pulse_config_file_reads_typed_schema(tmp_path: Path):
     assert pulse["gates"]["measure"]["amplitude"] == 1.2
     assert pulse["channel_overrides"]["XY_0"]["x"]["amplitude_Hz"] == 13.0e6
     assert pulse["acquisition"]["integration_window_ns"] == 160.0
+
+
+def test_load_pulse_config_file_rejects_legacy_operation_schema(tmp_path: Path):
+    pulse_path = tmp_path / "pulse.yaml"
+    pulse_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "3.0",
+                "pulse": {
+                    "channels": [{"name": "XY_q0", "kind": "drive"}],
+                    "carriers": {"XY_q0": {"freq_Hz": 5.0e9}},
+                    "waveforms": {"x90": {"shape": "drag", "duration_ns": 20.0}},
+                    "operations": {"sx": [{"channel": "XY_q0", "waveform": "x90"}]},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Legacy pulse schema"):
+        load_pulse_config_file(pulse_path)
+
+
+def test_load_pulse_config_file_rejects_flat_legacy_pulse_fields(tmp_path: Path):
+    pulse_path = tmp_path / "pulse.yaml"
+    pulse_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "pulse": {
+                    "gate_duration_ns": 20.0,
+                    "xy_freq_Hz": 5.0e9,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="typed top-level schema"):
+        load_pulse_config_file(pulse_path)
 
 
 def test_report_pulse_files_use_typed_schema_and_load():
@@ -193,9 +259,31 @@ def test_report_pulse_files_use_typed_schema_and_load():
 
     for pulse_path in pulse_paths:
         pulse_cfg = load_pulse_config_file(pulse_path)
+        assert pulse_cfg.get("gates")
         assert "gates" in pulse_cfg
         assert isinstance(pulse_cfg["gates"], dict)
-        assert pulse_cfg["gates"]
+        assert pulse_cfg.get("channel_overrides", {}) == {} or isinstance(pulse_cfg.get("channel_overrides"), dict)
+
+
+def test_template_and_example_pulse_files_use_typed_schema_and_load():
+    pulse_paths = [
+        Path("templates/pulses/single_qubit.yaml"),
+        Path("src/musiq/workflow/templates/pulses/single_qubit_default.yaml"),
+        Path("examples/noise_simulation_tests/task1/pulse.yaml"),
+        Path("examples/noise_simulation_tests/task2/pulse.yaml"),
+        Path("examples/noise_simulation_tests/task3/pulse.yaml"),
+        Path("examples/noise_simulation_tests/task4/pulse.yaml"),
+        Path("examples/noise_simulation_tests/task5/pulse_drag.yaml"),
+        Path("examples/noise_simulation_tests/task5/pulse_square.yaml"),
+        Path("examples/noise_simulation_tests/task6/pulse.yaml"),
+        Path("examples/noise_simulation_tests/task7/pulse.yaml"),
+        Path("report/compile_test/pulse.yaml"),
+    ]
+
+    for pulse_path in pulse_paths:
+        pulse_cfg = load_pulse_config_file(pulse_path)
+        assert isinstance(pulse_cfg, dict)
+        assert "gates" in pulse_cfg
 
 
 def test_solver_config_engine_dependency_validation(tmp_path: Path):
@@ -256,6 +344,28 @@ def test_device_config_rejects_component_representation_basis_and_role(tmp_path:
     )
     with pytest.raises(ValueError, match="no longer supported"):
         load_device_config_file(p)
+
+
+def test_filter_composite_device_for_step_keeps_only_explicit_active_components():
+    device = {
+        "components": [
+            {"id": "q0", "type": "transmon"},
+            {"id": "q1", "type": "transmon"},
+            {"id": "q2", "type": "transmon"},
+        ],
+        "connections": [
+            {"id": "zz_q0_q1", "type": "zz", "a": "q0", "b": "q1"},
+            {"id": "zz_q1_q2", "type": "zz", "a": "q1", "b": "q2"},
+        ],
+    }
+
+    filtered = filter_composite_device_for_step(
+        device,
+        {"active_components": ["q0"], "active_connections": []},
+    )
+
+    assert [comp["id"] for comp in filtered["components"]] == ["q0"]
+    assert filtered["connections"] == []
 
 
 def test_analyser_config_loads_metrics_and_trajectory(tmp_path: Path):
@@ -331,6 +441,26 @@ def test_create_model_accepts_direct_resource_configs(tmp_path: Path):
     assert "analyser_0" in model.config.analysers
     assert sorted(model.config.profiles.keys()) == ["default"]
     assert model.config.profiles["default"].solver_id == "solver_0"
+    assert "solver_0" in model.runs
+
+
+def test_create_model_accepts_circuit_config_from_schedule_helper(tmp_path: Path):
+    solver_path, device_path, pulse_path, analyser_path = _write_basic_solver_device_pulse_and_analyser(tmp_path)
+    schedule_path = tmp_path / "schedule_only.yaml"
+    schedule_path.write_text(json.dumps({"0": [[["x", [0]]]]}, ensure_ascii=False), encoding="utf-8")
+
+    model = create_model(
+        circuits=CircuitConfig.from_schedule_file(schedule_path),
+        solvers=solver_path,
+        devices=device_path,
+        pulses=pulse_path,
+        analysers=analyser_path,
+    )
+    model.run()
+
+    assert "default" in model.config.circuits
+    assert model.config.circuits["default"].circuit_ir is not None
+    assert model.config.circuits["default"].circuit_ir.schedule[0][0][0].name == "x"
     assert "solver_0" in model.runs
 
 

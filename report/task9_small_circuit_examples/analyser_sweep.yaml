@@ -1,0 +1,17 @@
+schema_version: "1.0"
+analysis:
+  - name: state_analysis
+    level: CASE
+    metrics:
+      - population
+      - leakage
+      - coherence_01
+      
+  - name: sweep_analysis
+    level: PARAMETRIC
+    metrics:
+      - final_P0
+      - final_P1
+      - final_fidelity
+      - final_leakage
+      - final_coherence_01

@@ -1,0 +1,13 @@
+schema_version: "1.0"
+# qasm_text: |
+#   OPENQASM 2.0;
+#   include "qelib1.inc";
+
+#   qreg q[1];
+#   creg c[1];
+#   sx q[0];
+num_qubits: 1
+num_clbits: 0
+schedule:
+  0:
+  - - ['sx', [0]]

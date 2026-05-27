@@ -316,7 +316,7 @@ def reorder_xy_z_channels(pulse_ir: PulseIR) -> PulseIR:
 
     def _rest_group(name: str) -> tuple[int, int, str]:
         up = name.upper()
-        m_tc_pair = re.match(r"^TC_Q(\d+)_Q(\d+)$", up)
+        m_tc_pair = re.match(r"^TC_(\d+)_(\d+)$", up)
         if m_tc_pair:
             return (0, int(m_tc_pair.group(1)) * 1000 + int(m_tc_pair.group(2)), "")
         m_tc = re.match(r"^TC_?(\d+)$", up)
@@ -342,9 +342,9 @@ def canonicalize_channel_names(pulse_ir: PulseIR) -> PulseIR:
     for ch in pulse_ir.channels:
         name = ch.name
         up = name.upper()
-        m_pair = re.match(r"^(TC)_Q?(\d+)_Q?(\d+)$", up)
+        m_pair = re.match(r"^(TC)_(\d+)_(\d+)$", up)
         if m_pair:
-            name = f"{m_pair.group(1)}_q{int(m_pair.group(2))}_q{int(m_pair.group(3))}"
+            name = f"{m_pair.group(1)}_{int(m_pair.group(2))}_{int(m_pair.group(3))}"
         m = re.match(r"^(XY|Z|RO|TC)_?(\d+)$", up)
         if m:
             name = f"{m.group(1)}_{int(m.group(2))}"

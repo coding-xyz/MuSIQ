@@ -9,6 +9,7 @@ import json
 
 from musiq.circuit.normalize import normalize_circuit
 from musiq.common.schemas import BackendConfig, CircuitIR
+from musiq.schemas.circuit import flatten_schedule
 
 
 class ICircuitPass(Protocol):
@@ -44,18 +45,18 @@ class CompilePipeline:
         """
         report = {
             "schema_version": "1.0",
-            "initial_gate_count": len(circuit.gates),
+            "initial_gate_count": len(flatten_schedule(circuit.schedule)),
             "passes": [],
             "hardware_used": bool(hardware),
         }
         current = circuit
         ctx = {"config": config, "hardware": hardware or {}}
         for p in self.passes:
-            before = len(current.gates)
+            before = len(flatten_schedule(current.schedule))
             current = p.run(current, ctx)
-            after = len(current.gates)
+            after = len(flatten_schedule(current.schedule))
             report["passes"].append({"name": p.__class__.__name__, "before": before, "after": after})
-        report["final_gate_count"] = len(current.gates)
+        report["final_gate_count"] = len(flatten_schedule(current.schedule))
         return current, report
 
     @staticmethod

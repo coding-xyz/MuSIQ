@@ -1,7 +1,27 @@
 schema_version: "1.0"
 pulse:
-  gate_duration_ns: 16.0
-  xy_freq_Hz: 5.0e9
-  single_qubit_shape: drag
-  single_qubit_sigma_fraction: 0.1666666667
-  single_qubit_drag_beta: 0.2
+  defaults:
+    xy_carrier_freq_Hz: 5.0e9
+    schedule_policy: serial
+
+  gates:
+    x:
+      recipe_type: x
+      shape: drag
+      duration_ns: 16.0
+      amplitude_Hz: 15.625e6
+      carrier_freq_Hz: 5.0e9
+      sigma_fraction: 0.1666666667
+      drag_beta: 0.2
+
+    sx:
+      recipe_type: sx
+      shape: drag
+      duration_ns: 16.0
+      amplitude_Hz: 7.8125e6
+      carrier_freq_Hz: 5.0e9
+      sigma_fraction: 0.1666666667
+      drag_beta: 0.2
+
+    virtual_z:
+      recipe_type: virtual_z

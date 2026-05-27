@@ -307,6 +307,18 @@ def _shot_trace_integrated_iq(
     return None
 
 
+def _pulse_cfg_payload(pulse_cfg: dict[str, Any]) -> dict[str, Any]:
+    """Support both direct pulse payloads and workflow configs nested under ``pulse``."""
+    nested = pulse_cfg.get("pulse")
+    payload = dict(nested) if isinstance(nested, dict) else dict(pulse_cfg)
+    acquisition = dict(payload.get("acquisition", {}) or {})
+    acquisition_extras = dict(acquisition.pop("extras", {}) or {})
+    if acquisition_extras:
+        acquisition = {**acquisition, **acquisition_extras}
+    payload["acquisition"] = acquisition
+    return payload
+
+
 def build_readout_analysis(
     *,
     trajectory,
@@ -326,6 +338,7 @@ def build_readout_analysis(
     
     pulse_cfg = p_cfg
     device_cfg = d_cfg
+    pulse_payload = _pulse_cfg_payload(pulse_cfg)
 
     # ``run_analysis`` passes the typed workflow ``DeviceConfig`` dataclass, whose
     # actual component graph lives under the nested ``device`` key. Older callers
@@ -384,7 +397,7 @@ def build_readout_analysis(
         complex_envelope=a_out,
         pulse_ir=pulse_ir,
         readout_cfg=receiver_fake_cfg,
-        pulse_cfg=pulse_cfg,
+        pulse_cfg=pulse_payload,
         chain=ro0_params,
         rng=rng,
     )
@@ -394,11 +407,11 @@ def build_readout_analysis(
     digital_baseband = np.asarray(receiver.get("digital_baseband", []), dtype=complex)
     
     measure_windows = _extract_readout_windows(pulse_ir)
-    integration_window_s = _safe_float((pulse_cfg.get("acquisition", {}) or {}).get("integration_window_ns", 0.0), 0.0) * 1.0e-9
-    start_delay_s = _safe_float((pulse_cfg.get("acquisition", {}) or {}).get("start_delay_ns", 0.0), 0.0) * 1.0e-9
+    integration_window_s = _safe_float((pulse_payload.get("acquisition", {}) or {}).get("integration_window_ns", 0.0), 0.0) * 1.0e-9
+    start_delay_s = _safe_float((pulse_payload.get("acquisition", {}) or {}).get("start_delay_ns", 0.0), 0.0) * 1.0e-9
     
     if integration_window_s <= 0.0:
-        integration_window_s = _safe_float(pulse_cfg.get("measure_duration_ns", 0.0), 0.0) * 1.0e-9
+        integration_window_s = _safe_float(pulse_payload.get("measure_duration_ns", 0.0), 0.0) * 1.0e-9
 
     # For Case level, we integrate the first window as the primary IQ point
     integrated_iq = None

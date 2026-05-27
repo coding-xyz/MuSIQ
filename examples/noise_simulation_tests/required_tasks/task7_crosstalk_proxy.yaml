@@ -22,8 +22,9 @@ cases:
           kind: xx+yy
       qubit_freqs_Hz: [5.0e9, 5.15e9]
     pulse:
-      measure_duration_ns: 60.0
-      gate_duration_ns: 20.0
+      defaults:
+        measure_duration_ns: 60.0
+        gate_duration_ns: 20.0
     noise:
       - id: q0_ou_weak_xtalk
         kind: ou
@@ -49,8 +50,9 @@ cases:
           kind: xx+yy
       qubit_freqs_Hz: [5.0e9, 5.05e9]
     pulse:
-      measure_duration_ns: 120.0
-      gate_duration_ns: 28.0
+      defaults:
+        measure_duration_ns: 120.0
+        gate_duration_ns: 28.0
     noise:
       - id: q0_ou_strong_xtalk
         kind: ou

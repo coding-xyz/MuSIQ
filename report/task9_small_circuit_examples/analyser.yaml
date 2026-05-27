@@ -1,0 +1,8 @@
+schema_version: "1.0"
+analysis:
+  - name: state_analysis
+    level: CASE
+    metrics:
+      - population
+      - leakage
+      - coherence_01

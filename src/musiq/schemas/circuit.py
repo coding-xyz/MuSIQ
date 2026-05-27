@@ -1,4 +1,9 @@
-"""Circuit-level intermediate representations."""
+"""Circuit-level intermediate representations.
+
+``CircuitIR`` is schedule-first: the execution structure is carried by
+``schedule`` and not by a flat logical gate list. Code that needs a flattened
+view should call :func:`flatten_schedule` explicitly.
+"""
 
 from __future__ import annotations
 
@@ -133,11 +138,6 @@ class CircuitIR:
                 copied_lanes.append([])
             normalized[tick] = copied_lanes
         self.schedule = normalized
-
-    @property
-    def gates(self) -> list[CircuitGate]:
-        """Derived flat logical-gate stream from ``schedule``."""
-        return flatten_schedule(self.schedule)
 
 
 @dataclass

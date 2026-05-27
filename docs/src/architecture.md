@@ -1,50 +1,56 @@
-# 缁崵绮洪弸鑸电€?(System Architecture)
+# System Overview
 
-`MuSIQ` 閺勵垯绔存稉顏勫瀻鐏炲倿鍣洪崠鏍﹁雹閻喎浼愭担婊勭ウ缁崵绮洪敍灞炬，閸︺劍褰佹笟娑楃娑擃亞绮ㄩ弸鍕旂€规哎鈧胶琚崹瀣暔閸忋劋绗栭崣顖涘⒖鐏炴洜娈戝鍡樼仸閿涘瞼鏁ゆ禍搴ょТ鐎靛ジ鍣虹€涙劘顓哥粻妤佹簚閻ㄥ嫬娅旀竟鐗堝閸掑墎鐖虹粚韬测偓?
-## 1. 閺嶇绺剧拋鎹愵吀閸濇彃顒?
+MuSIQ is organized around a compile-to-execution pipeline:
 
-閺堫剛閮寸紒鐔烘畱閺嶇绺剧拋鎹愵吀閻炲棗搴烽弰?**"濡€崇€锋す鍗炲З (Model-First)"**閵嗗倹澧嶉張澶屾畱娴犺法婀￠柊宥囩枂閵嗕浇绻嶇悰宀€濮搁幀浣碘偓浣疯厬闂傜繝楠囬悧鈺佹嫲閸掑棙鐎界紒鎾寸亯闁晫绮烘稉鈧紒鍕矏閸︺劋绔存稉顏堛€婄仦?`Model` 鐎电钖勬稉顓溾偓?
+`circuit config -> CircuitIR -> gate schedule -> PulseIR -> ExecutableModel -> ModelSpec -> engine result -> analysis`
 
-### 1.1 閺嬭埖鐎惄顔界垼
-- **閸楁洑绔撮弶鍐ㄢ枆閺夈儲绨?*閿涙碍鐦℃稉顏咁洤韫囬潧婀化鑽ょ埠娑擃厼褰ч張澶夌娑擃亝娼堟繛浣烘畱鐎涙ê鍋嶆担宥囩枂閵?
-- **閸忚櫕鏁為悙鐟板瀻缁?*閿涙岸鍘ょ純?(Config)閵嗕浇绻嶇悰宀€濮搁幀?(State)閵嗕椒鑵戦梻纾嬨€冪粈?(IR)閵嗕焦澧界悰宀€绮ㄩ弸?(Result) 閸滃苯鍨庨弸?(Analysis) 娑撱儲鐗搁崚鍡欘瀲閵?
-- **缁鐎风€瑰鍙?*閿涙矮绱崗鍫滃▏閻劌宸辩猾璇茬€风€电钖勯敍鍧塧taclass/schema閿涘鈧矂娼崢鐔奉潗鐎涙鍚€閿涘奔浜掗崙蹇撶毌鏉╂劘顢戦弮鍫曟晩鐠囶垰鑻熼幓鎰扮彯娴狅絿鐖滈崣顖滄樊閹躲倖鈧佲偓?
-- **缂佹挻鐎粙鍐茬暰**閿涙艾鐣炬稊澶嬬閺呮壆娈戠仦鍌滈獓鏉堝湱鏅敍宀勬Щ濮濄垹濮涢懗钘夌杽閻滄媽绻冪粙瀣╄厬閸戣櫣骞囩紒鎾寸€鍌溞╅妴?
+## Core Layers
 
-## 2. 闁槒绶崚鍡楃湴
+- `musiq.workflow`
+  - loads user-facing resource files
+  - composes runtime tasks
+  - coordinates compilation, execution, and analysis
+- `musiq.circuit`
+  - parses OpenQASM and structured circuit YAML
+  - normalizes logical gates into `CircuitIR`
+- `musiq.backend`
+  - runs circuit passes
+  - schedules logical gates
+  - builds engine-neutral model artifacts
+- `musiq.pulse`
+  - resolves typed pulse recipes
+  - lowers logical gates into channel pulse sequences
+- `musiq.schemas`
+  - owns the typed IRs and result contracts
 
-`MuSIQ` 閻ㄥ嫪鍞惍浣哥氨閸掑棔璐熸禒銉ょ瑓閸忔娊鏁仦鍌滈獓閿?
-| 鐏炲倻楠?| 閻╊喖缍?| 閼卞矁鐭?|
-| :--- | :--- | :--- |
-| **Schemas** | `schemas/` | 鐎规矮绠熺粙鍐茬暰閻ㄥ嫮琚崹瀣厵濡€崇€烽崪灞兼唉閹广垼绔熼悾宀嬬礄閺佺増宓佺紒鎾寸€敍澶堚偓?|
-| **Workflow** | `workflow/` | 缂佸嫬鎮庨柊宥囩枂閵嗕焦鐎楦跨箥鐞涘本妞傛禒璇插閵嗕胶绱幒鎺撳⒔鐞涘本绁︾粙瀣ㄢ偓浣侯吀閻炲棙膩閸ㄥ瀵旀稊鍛閵?|
-| **Backend** | `backend/` | 鐏忓棝鍣虹€涙劗鍤庣捄顖氭嫲鐠佹儳顦幓蹇氬牚缂傛牞鐦ф稉鍝勫讲閹笛嗩攽閻ㄥ嫪璞㈤惇鐔改侀崹瀣ㄢ偓?|
-| **Engines** | `engines/` | 閸忚渹缍嬮惃鍕殶閸婂吋澧界悰灞芥倵缁旑垽绱欐俊?QuTiP, Julia 缁涘绱氶敍灞剧Х鐠愰€涜厬缁斿娈戝Ο鈥崇€风憴鍕瘱閵?|
-| **Analysis** | `analysis/` | 鐎电寤烘潻?(Trajectory) 鏉╂稖顢戦崥搴☆槱閻炲棴绱濋悽鐔稿灇閹稿洦鐖ｉ妴浣筋嚢閸戝搫鍨庨弸鎰嫲閹躲儱鎲￠妴?|
-| **Pulse** | `pulse/` | 閼村鍟块梽宥勭秵 (Lowering)閵嗕胶绱拠鎴欌偓浣瑰皾瑜般垻鏁撻幋鎰挤閸欘垵顫嬮崠鏍モ偓?|
-| **Circuit** | `circuit/` | 缁捐儻鐭剧€电厧鍙嗛妴浣割嚤閸戞亽鈧礁缍婃稉鈧崠鏍ф嫲闂傘劎楠囬幙宥勭稊閵?|
-| **QEC** | `qec/` | 鐟欙絿鐖滈崳銊ｂ偓浣稿帥妤犲本顩ч悳鍥モ偓浣烘偅閸氬牆绶涢崣濠団偓鏄忕帆闁挎瑨顕ゆ径鍕倞閵?|
-| **UI/Session** | `ui/`, `session/` | 閹绘劒绶?CLI閵嗕腐otebook 娴溿倓绨伴悾宀勬桨閸滃奔绱扮拠婵堫吀閻炲棎鈧?|
-| **Common** | `common/` | 閸忓彉闊╅崢鐔活嚔閵嗕礁绨崚妤€瀵叉潏鍛И瀹搞儱鍙块崪宀勨偓姘辨暏閸╄櫣顢呯猾姹団偓?|
+## Compiler Decisions
 
-## 3. 閺佺増宓佸ù浣告倻
+## Schedule-First Circuit IR
 
-缁崵绮洪柆闈涙儕娑撱儲鐗搁惃鍕礋閸氭垶鏆熼幑顔界ウ閿?
+Parallel circuit structure is represented directly in `CircuitIR.schedule`.
+Downstream scheduling and lowering consume that structure instead of rebuilding
+parallelism from a flat gate list.
 
-`闁板秶鐤?(Config) $\rightarrow$ 鏉╂劘顢戦弮璺侯殩缁?(Runtime Contract) $\rightarrow$ 缂傛牞鐦ф禍褏澧?(Compiled Artifacts) $\rightarrow$ 瀵洘鎼哥紒鎾寸亯 (Engine Result) $\rightarrow$ 鐞涘秶鏁撻崚鍡樼€?(Derived Analysis)`
+## Gate-First Pulse Schema
 
-## 4. 閺嶇绺惧Ο鈥崇€风紒鎾寸€?
+Pulse configuration is centered on typed logical recipes:
 
-`Model` 鐎电钖勯惃鍕偓鏄忕帆缂佹挻鐎俊鍌欑瑓閿?
+- `pulse.defaults`
+- `pulse.gates`
+- `pulse.channel_overrides`
 
-- **Model**
-    - `config`: `ModelConfig` (娴犺濮? 鐠佹儳顦? 濮瑰倽袙閸? 閼村鍟? 閸掑棙鐎介崳銊╁帳缂?
-    - `state`: `ModelState` (鏉炲鍣虹痪褌绱扮拠婵堝Ц閹緤绱濇俊鍌涙付閸氬氦绻嶇悰宀€娈?ID)
-    - `registry`: `ModelRegistry` (閹稿洦鐖ｅ▔銊ュ斀鐞涖劎鐡戦崗鍙橀煩鐠у嫭绨?
-    - `runs`: `dict[str, ModelRun]` (濮ｅ繑顐奸幍褑顢戦惃鍕缁斿顔囪ぐ?
-        - `identity`: `RunIdentity` (鏉╂劘顢戦弽鍥槕)
-        - `runtime_task`: `WorkflowTask` (鐎圭偤妾幍褑顢戦惃鍕崲閸斺€愁殩缁?
-        - `artifacts`: `RunArtifacts` (缂傛牞鐦ф禍褏澧块敍灞筋洤 `ModelSpec`, Pulse IR)
-        - `result`: `RunResult` (娴滃鐤勯幍褑顢戠紒鎾寸亯閿涘苯顩?`Trajectory`)
-    - `analyses`: `dict[str, ModelAnalysis]` (閸╄桨绨稉鈧稉顏呭灗婢舵矮閲?Run 閻ㄥ嫬鎮楁径鍕倞缂佹挻鐏?
-    - `manifest`: `ModelManifest` (閸忓啯鏆熼幑顔界閸?
+This keeps physical defaults separate from gate calibrations and allows
+channel-specific specialization without creating a second recipe namespace.
+
+## No Legacy Pulse Compatibility Layer
+
+Legacy pulse schemas based on:
+
+- `channels`
+- `carriers`
+- `waveforms`
+- `operations`
+- top-level flat gate knobs such as `single_qubit_gate_amp_scale`
+
+are intentionally rejected at load time. The typed schema is the only supported
+user-facing pulse contract.

@@ -8,7 +8,7 @@ import math
 import re
 
 from musiq.common.schemas import CircuitGate, CircuitIR
-from musiq.schemas.circuit import build_serial_schedule
+from musiq.schemas.circuit import build_serial_schedule, flatten_schedule
 
 
 class CircuitAdapter:
@@ -294,7 +294,7 @@ class CircuitAdapter:
         if circuit.num_clbits:
             lines.append(f"creg c[{circuit.num_clbits}];")
 
-        for g in circuit.gates:
+        for g in flatten_schedule(circuit.schedule):
             if g.name == "barrier": continue
             qargs = ", ".join([f"q[{idx}]" for idx in g.qubits])
             if g.name == "measure" and g.clbits:
@@ -317,7 +317,7 @@ class CircuitAdapter:
         if circuit.num_clbits:
             lines.append(f"bit[{circuit.num_clbits}] c;")
 
-        for g in circuit.gates:
+        for g in flatten_schedule(circuit.schedule):
             if g.name == "barrier": continue
             qargs = ", ".join([f"q[{idx}]" for idx in g.qubits])
             if g.name == "measure" and g.clbits:
@@ -355,7 +355,7 @@ class CircuitAdapter:
             "cz": qc.cz,
             "id": qc.id,
         }
-        for g in circuit.gates:
+        for g in flatten_schedule(circuit.schedule):
             if g.name == "barrier":
                 continue
             if g.name == "measure":

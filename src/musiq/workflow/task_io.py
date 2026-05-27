@@ -11,6 +11,7 @@ import yaml
 
 from musiq.backend.config import validate_backend_config
 from musiq.common.schemas import CircuitIR, CircuitGate
+from musiq.pulse.catalog import validate_typed_pulse_schema
 from musiq.schemas.utils import ParameterSweepConfig, ParameterList
 from musiq.workflow.contracts import (
     AnalyserTrajectoryConfig,
@@ -90,9 +91,6 @@ def _is_v3_solver_payload(payload: dict[str, Any]) -> bool:
     return isinstance(payload.get("solver"), dict)
 
 
-def _is_v3_pulse_payload(payload: dict[str, Any]) -> bool:
-    raw_pulse = payload.get("pulse", {}) or {}
-    return isinstance(raw_pulse, dict) and any(k in raw_pulse for k in {"channels", "carriers", "waveforms", "operations"})
 def _map_circuit_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if _is_v1_circuit_payload(payload):
         circuit = dict(payload.get("circuit", {}) or {})
@@ -147,100 +145,67 @@ def _build_circuit_ir_from_schedule_payload(payload: dict[str, Any]) -> CircuitI
     )
 
 
-def _map_v3_pulse_payload(raw_pulse: dict[str, Any]) -> dict[str, Any]:
-    channels = list(raw_pulse.get("channels", []) or [])
-    carriers = dict(raw_pulse.get("carriers", {}) or {})
-    waveforms = dict(raw_pulse.get("waveforms", {}) or {})
-    operations = dict(raw_pulse.get("operations", {}) or {})
-    acquisition = dict(raw_pulse.get("acquisition", {}) or {})
+def _infer_schedule_dimensions(raw_schedule: Mapping[str | int, Any]) -> tuple[int, int]:
+    max_qubit = -1
+    max_clbit = -1
+    max_lane_count = 0
+    for raw_lanes in raw_schedule.values():
+        lanes_list = list(raw_lanes or [])
+        max_lane_count = max(max_lane_count, len(lanes_list))
+        for raw_lane in lanes_list:
+            for raw_gate in list(raw_lane or []):
+                if isinstance(raw_gate, Mapping):
+                    qubits = [int(q) for q in list(raw_gate.get("qubits", []) or [])]
+                    clbits = [int(c) for c in list(raw_gate.get("clbits", []) or [])]
+                elif isinstance(raw_gate, list) and len(raw_gate) >= 2:
+                    qubits = [int(q) for q in list(raw_gate[1] or [])]
+                    clbits = []
+                else:
+                    continue
+                if qubits:
+                    max_qubit = max(max_qubit, max(qubits))
+                if clbits:
+                    max_clbit = max(max_clbit, max(clbits))
+    inferred_qubits = max(max_lane_count, max_qubit + 1 if max_qubit >= 0 else 0)
+    inferred_clbits = max_clbit + 1 if max_clbit >= 0 else 0
+    return inferred_qubits, inferred_clbits
 
-    def _carrier_freq_for_kind(kind: str, default: float) -> float:
-        for ch in channels:
-            if not isinstance(ch, dict):
-                continue
-            if str(ch.get("kind", "")).strip().lower() != kind:
-                continue
-            name = str(ch.get("name", ""))
-            if isinstance(carriers.get(name), dict) and "freq_Hz" in carriers[name]:
-                return float(carriers[name]["freq_Hz"])
-        return float(default)
 
-    def _waveform_from_operation(name: str, fallback_shapes: set[str]) -> dict[str, Any]:
-        steps = list(operations.get(name, []) or [])
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            wf_name = str(step.get("waveform", ""))
-            if wf_name and isinstance(waveforms.get(wf_name), dict):
-                return dict(waveforms[wf_name])
-        for wf in waveforms.values():
-            if isinstance(wf, dict) and str(wf.get("shape", "")).strip().lower() in fallback_shapes:
-                return dict(wf)
-        return {}
+def circuit_from_schedule_payload(
+    schedule_or_payload: Mapping[str | int, Any],
+    *,
+    num_qubits: int | None = None,
+    num_clbits: int | None = None,
+    schema_version: str = "1.0",
+    format: str = "circuit_layer_yaml",
+    param_bindings: Mapping[str, float] | None = None,
+) -> CircuitConfig:
+    """Build ``CircuitConfig`` from either a raw schedule mapping or a schedule-style payload."""
+    payload = dict(schedule_or_payload or {})
+    if "schedule" not in payload:
+        payload = {"schedule": payload}
 
-    def _operation_scale(name: str, default: float = 1.0) -> float:
-        steps = list(operations.get(name, []) or [])
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            if "scale" in step:
-                return float(step.get("scale", default))
-        return float(default)
+    raw_schedule = payload.get("schedule")
+    if not isinstance(raw_schedule, Mapping):
+        raise ValueError("Schedule payload must be a mapping or contain a top-level `schedule` mapping.")
 
-    def _measure_segments() -> list[dict[str, Any]]:
-        steps = list(operations.get("measure", []) or [])
-        segments: list[dict[str, Any]] = []
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            wf_name = str(step.get("waveform", ""))
-            wf = dict(waveforms.get(wf_name, {}) or {}) if wf_name and isinstance(waveforms.get(wf_name), dict) else {}
-            if not wf:
-                continue
-            if "duration_ns" not in wf:
-                continue
-            segments.append(
-                {
-                    "duration_ns": float(wf["duration_ns"]),
-                    "amp": 0.8 * float(step.get("scale", 1.0)),
-                    "edge_ns": float(wf.get("edge_ns", 0.0) or 0.0),
-                    "rise_ns": float(wf.get("rise_ns", wf.get("edge_ns", 0.0)) or 0.0),
-                    "fall_ns": float(wf.get("fall_ns", wf.get("edge_ns", 0.0)) or 0.0),
-                    "shape": str(wf.get("shape", "readout") or "readout"),
-                }
-            )
-        return segments
+    inferred_qubits, inferred_clbits = _infer_schedule_dimensions(dict(raw_schedule or {}))
+    payload["schema_version"] = str(payload.get("schema_version", schema_version) or schema_version)
+    payload["format"] = str(payload.get("format", format) or format)
+    payload["num_qubits"] = int(
+        num_qubits
+        if num_qubits is not None
+        else payload.get("num_qubits", inferred_qubits) or inferred_qubits
+    )
+    payload["num_clbits"] = int(
+        num_clbits
+        if num_clbits is not None
+        else payload.get("num_clbits", inferred_clbits) or inferred_clbits
+    )
+    if param_bindings is not None:
+        payload["param_bindings"] = dict(param_bindings)
 
-    gate_wf = _waveform_from_operation("x", {"drag", "gaussian", "rect"})
-    measure_wf = _waveform_from_operation("measure", {"readout", "rect"})
-    measure_segments = _measure_segments()
-
-    mapped: dict[str, Any] = {}
-    mapped["xy_freq_Hz"] = _carrier_freq_for_kind("drive", 5.0e9)
-    mapped["ro_freq_Hz"] = _carrier_freq_for_kind("readout_drive", mapped["xy_freq_Hz"])
-    if "duration_ns" in gate_wf:
-        mapped["gate_duration_ns"] = float(gate_wf["duration_ns"])
-    if measure_segments:
-        mapped["measure_segments"] = measure_segments
-        mapped["measure_duration_ns"] = float(sum(float(seg.get("duration_ns", 0.0) or 0.0) for seg in measure_segments))
-        mapped["measure_amp"] = float(measure_segments[0].get("amp", 0.8))
-    elif "duration_ns" in measure_wf:
-        mapped["measure_duration_ns"] = float(measure_wf["duration_ns"])
-        mapped["measure_amp"] = 0.8 * _operation_scale("measure", 1.0)
-    else:
-        mapped["measure_amp"] = 0.8 * _operation_scale("measure", 1.0)
-    if "edge_ns" in measure_wf:
-        mapped["readout_edge_ns"] = float(measure_wf["edge_ns"])
-    if "measure_start_delay_ns" in acquisition:
-        mapped["measure_start_delay_ns"] = float(acquisition["measure_start_delay_ns"])
-    if "integration_window_ns" in acquisition:
-        mapped["measure_duration_ns"] = float(acquisition["integration_window_ns"])
-    if acquisition:
-        mapped["acquisition"] = acquisition
-    schedule_cfg = dict(raw_pulse.get("schedule", {}) or {})
-    if schedule_cfg.get("policy"):
-        mapped["schedule_policy"] = str(schedule_cfg.get("policy"))
-    return mapped
+    return circuit_from_payload(payload)
 
 
 def _resolve_path(base_dir: Path, value: str | None) -> str | None:
@@ -446,6 +411,27 @@ def load_circuit_config_file(path: str | Path) -> CircuitConfig:
     """Load a circuit config file into ``CircuitConfig``."""
     cfg_path, payload = _load_mapping(path)
     return circuit_from_payload(payload, base_dir=cfg_path.parent)
+
+
+def load_circuit_schedule_file(
+    path: str | Path,
+    *,
+    num_qubits: int | None = None,
+    num_clbits: int | None = None,
+    schema_version: str = "1.0",
+    format: str = "circuit_layer_yaml",
+    param_bindings: Mapping[str, float] | None = None,
+) -> CircuitConfig:
+    """Load a raw schedule YAML/JSON file into ``CircuitConfig``."""
+    _, payload = _load_mapping(path)
+    return circuit_from_schedule_payload(
+        payload,
+        num_qubits=num_qubits,
+        num_clbits=num_clbits,
+        schema_version=schema_version,
+        format=format,
+        param_bindings=param_bindings,
+    )
 def solver_from_payload(payload: dict[str, Any], base_dir: Path | None = None) -> SolverConfig:
     """Convert a solver payload dictionary into a ``SolverConfig`` object."""
     payload = _apply_template("solvers", payload)
@@ -540,8 +526,10 @@ def pulse_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _apply_template("pulses", payload)
     _validate_pulse_payload(payload)
     raw_pulse = dict(payload.get("pulse", {}) or {})
-    if _is_v3_pulse_payload(payload):
-        return _map_v3_pulse_payload(raw_pulse)
+    internal_resource_keys = {"acquisition", "timing", "channels", "extras"}
+    if raw_pulse and set(raw_pulse).issubset(internal_resource_keys):
+        return raw_pulse
+    validate_typed_pulse_schema(raw_pulse, strict_user_payload=True)
     return raw_pulse
 
 
@@ -783,11 +771,13 @@ __all__ = [
     "load_config_bundle_files",
     "load_analyser_config_file",
     "load_circuit_config_file",
+    "load_circuit_schedule_file",
     "load_device_config_file",
     "load_pulse_config_file",
     "load_solver_config_file",
     "load_config",
     "circuit_from_payload",
+    "circuit_from_schedule_payload",
     "solver_from_payload",
     "device_from_payload",
     "pulse_from_payload",

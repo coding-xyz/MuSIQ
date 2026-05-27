@@ -5,11 +5,10 @@ pulse generation:
 
 - ``DefaultPulseLowering`` for converting ``CircuitIR`` into ``PulseIR``
 - ``PulseCompiler`` for building pulse sequences
-- ``build_gate_mapping_catalog`` for inspecting gate-to-pulse recipes
 - ``instantiate_operation_recipe`` for resolving concrete pulse recipes
 """
 
-from musiq.pulse.catalog import build_gate_mapping_catalog, instantiate_operation_recipe
+from musiq.pulse.catalog import instantiate_operation_recipe
 from musiq.pulse.lowering import DefaultLowering, DefaultPulseLowering, IPulseLowering
 from musiq.pulse.sequence import PulseCompiler
 
@@ -18,6 +17,5 @@ __all__ = [
     "DefaultPulseLowering",
     "IPulseLowering",
     "PulseCompiler",
-    "build_gate_mapping_catalog",
     "instantiate_operation_recipe",
 ]

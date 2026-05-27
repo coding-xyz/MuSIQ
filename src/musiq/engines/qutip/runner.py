@@ -13,6 +13,40 @@ from musiq.engines.qutip.runtime import QutipPlan, QutipRunConfig, QutipTrajecto
 class QutipRunnerMixin:
     """Coordinate QuTiP setup, solver dispatch, and trajectory formatting."""
 
+    @staticmethod
+    def _has_time_dependent_controls(setup: QutipPlan) -> bool:
+        model_spec = setup.model_spec
+        control_terms = list(getattr(model_spec.hamiltonian, "control_terms", []) or [])
+        readout_controls = list(getattr(model_spec.readout, "controls", []) or [])
+        return bool(control_terms or readout_controls)
+
+    @staticmethod
+    def _cap_qutip_max_step(options, *, dt: float, has_controls: bool):
+        """Keep adaptive QuTiP solvers from stepping over narrow sampled pulses."""
+        if not has_controls:
+            return options
+        max_step = max(float(dt), 1e-12)
+        if options is None:
+            return {"max_step": max_step}
+        if isinstance(options, dict):
+            out = dict(options)
+            raw = out.get("max_step")
+            try:
+                current = float(raw)
+            except Exception:
+                current = 0.0
+            if current <= 0.0 or current > max_step:
+                out["max_step"] = max_step
+            return out
+        try:
+            raw = getattr(options, "max_step", None)
+            current = float(raw) if raw is not None else 0.0
+            if current <= 0.0 or current > max_step:
+                setattr(options, "max_step", max_step)
+        except Exception:
+            pass
+        return options
+
     def run(self, model_spec: ModelSpec) -> Trajectory:
         """Solve model dynamics based on ``model_spec.solver_mode``."""
         model_type = str(model_spec.system.model_type)
@@ -144,15 +178,20 @@ class QutipRunnerMixin:
         store_states = requested_state_kind in {"wave_function", "density_matrix"} and (
             save_times != "none" or save_final_state
         )
+        options = self._solver_options_with_state_storage(
+            setup.qt,
+            setup.run_config.qutip_options,
+            store_states=store_states,
+            keep_runs_results=solver == "mcwf",
+        )
         return QutipTrajectoryRequest(
             requested_state_kind=requested_state_kind,
             save_times=save_times,
             save_final_state=save_final_state,
-            options=self._solver_options_with_state_storage(
-                setup.qt,
-                setup.run_config.qutip_options,
-                store_states=store_states,
-                keep_runs_results=solver == "mcwf",
+            options=self._cap_qutip_max_step(
+                options,
+                dt=setup.dt,
+                has_controls=self._has_time_dependent_controls(setup),
             ),
         )
 

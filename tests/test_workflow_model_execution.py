@@ -7,6 +7,7 @@ import pytest
 from musiq.schemas.model import ModelRun, RunIdentity
 from musiq.schemas.results import CaseAnalysis, MetricSeries, ReadoutAnalysis, RunResult, RunProvenance, ParameterValues, ShotData
 from musiq.common.id_generator import IDGenerator
+from musiq.analysis.case.readout.analysis import build_readout_analysis as build_case_readout_analysis
 from musiq.analysis.metrics import resolve_metrics_payload
 from musiq.analysis.readout_chain import build_readout_analysis
 from musiq.workflow.contracts import AnalyserConfig, ProfileConfig, PulseConfig, SolverBackendConfig, SolverConfig, WorkflowRunOptions
@@ -786,6 +787,68 @@ def test_build_readout_analysis_supports_nested_device_config_payload():
     assert readout.chain_params["carrier_frequency_Hz"] == 6.45e9
     assert readout.demodulation["carrier_frequency_Hz"] == 6.45e9
     assert readout.demodulation["adc_sample_rate_Hz"] == 10.0e9
+
+
+def test_build_readout_analysis_supports_nested_pulse_config_payload():
+    trajectory = SimpleNamespace(
+        times=[0.0, 1.0, 2.0],
+        classical={
+            "readout": {
+                "a_in": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                "cavity_a": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                "a_out": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                "shots": [
+                    {
+                        "hidden_state_label": "0",
+                        "measured_voltage": [[1.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
+                    },
+                    {
+                        "hidden_state_label": "1",
+                        "measured_voltage": [[3.0, 0.0], [4.0, 0.0], [5.0, 0.0]],
+                    },
+                ],
+            }
+        },
+    )
+    pulse_ir = SimpleNamespace(
+        channels=[
+            SimpleNamespace(
+                name="RO_0",
+                pulses=[SimpleNamespace(shape="readout", params={"break_stage": "measure"}, t0_s=0.0, t1_s=2.0)],
+            )
+        ]
+    )
+    pulse_cfg = {
+        "pulse": {
+            "acquisition": {
+                "extras": {
+                    "start_delay_ns": 1.0e9,
+                    "integration_window_ns": 1.0e9,
+                }
+            }
+        }
+    }
+    device_cfg = {"components": [{"id": "ro0", "parameters": {"adc_sample_rate_Hz": 1.0}}]}
+
+    readout = build_readout_analysis(
+        trajectory=trajectory,
+        model_spec=SimpleNamespace(payload={}),
+        pulse_ir=pulse_ir,
+        pulse_cfg=pulse_cfg,
+        device_cfg=device_cfg,
+        seed=123,
+    )
+    case_readout = build_case_readout_analysis(
+        trajectory=trajectory,
+        model_spec=SimpleNamespace(payload={}),
+        pulse_ir=pulse_ir,
+        pulse_cfg=pulse_cfg,
+        device_cfg=device_cfg,
+        seed=123,
+    )
+
+    assert readout.integrated_points == [complex(2.5, 0.0), complex(4.5, 0.0)]
+    assert case_readout.integrated_points == [complex(2.5, 0.0), complex(4.5, 0.0)]
 
 
 def test_readout_analysis_reconstruct_shot_coerces_scalar_chain_params():

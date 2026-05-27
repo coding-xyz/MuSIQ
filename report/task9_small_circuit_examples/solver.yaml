@@ -1,0 +1,34 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  study:
+    - name: pulse_shape
+      description: simulate a two-qubit Bell-state circuit on q0-q1
+      active_components: [q0, q1, q2]
+      active_connections: [zz_q0_q1, zz_q1_q2]
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+        q1: quantum
+        q2: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 2
+        q1:
+          kind: nlevel
+          levels: 2
+        q2:
+          kind: nlevel
+          levels: 2
+      solver_mode: me
+      time:
+        dt_s: 1.0e-10
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}

@@ -3,8 +3,9 @@ import math
 import pytest
 
 from musiq.common.schemas import BackendConfig, CircuitGate, CircuitIR
+from musiq.pulse.catalog import instantiate_operation_recipe, resolve_typed_gate_recipe
 from musiq.pulse.lowering import DefaultPulseLowering
-from musiq.pulse.catalog import instantiate_operation_recipe
+from musiq.schemas.pulse import CouplerTwoQubitRecipe, DrivenSingleQubitRecipe, MeasureRecipe, VirtualPhaseGateRecipe
 from musiq.schemas.circuit import build_serial_schedule
 
 
@@ -61,53 +62,28 @@ def test_lower_tracks_reset_events_and_metadata():
     assert executable.metadata["reset_feedback_policy"] == "serial_global"
 
 
-def test_gate_recipe_supports_split_single_and_double_qubit_calibration_knobs():
-    hw = {
-        "gate_duration_ns": 20.0,
-        "single_qubit_gate_duration_ns": 24.0,
-        "double_qubit_gate_duration_ns": 70.0,
-        "single_qubit_gate_amp_scale": 1.5,
-        "double_qubit_gate_amp_scale": 0.5,
-        "xy_freq_Hz": 5.0e9,
-        "single_qubit_shape": "drag",
-        "single_qubit_sigma_fraction": 1.0 / 6.0,
-        "single_qubit_drag_beta": 0.25,
-        "rect_edge_ns": 2.0,
-    }
+def test_legacy_amp_scale_fields_are_rejected():
+    with pytest.raises(ValueError, match="Legacy pulse schema"):
+        instantiate_operation_recipe(
+            "rx",
+            [0],
+            gate_params=[math.pi],
+            start_ns=0.0,
+            hw={"single_qubit_gate_amp_scale": 1.5},
+        )
 
-    rx_pulses, rx_duration, _ = instantiate_operation_recipe("rx", [0], gate_params=[math.pi], start_ns=0.0, hw=hw)
-    cz_pulses, cz_duration, _ = instantiate_operation_recipe("cz", [0, 1], start_ns=0.0, hw=hw)
-
-    assert rx_duration == 24.0
-    assert len(rx_pulses) == 1
-    assert math.isclose(rx_pulses[0][1].t1_s - rx_pulses[0][1].t0_s, 24.0e-9)
-
-    baseline_rx_pulses, _, _ = instantiate_operation_recipe(
-        "rx",
-        [0],
-        gate_params=[math.pi],
-        start_ns=0.0,
-        hw={**hw, "single_qubit_gate_amp_scale": 1.0},
-    )
-    assert rx_pulses[0][1].amp == baseline_rx_pulses[0][1].amp * 1.5
-
-    assert cz_duration == 70.0
-    assert len(cz_pulses) == 1
-    assert math.isclose(cz_pulses[0][1].t1_s - cz_pulses[0][1].t0_s, 70.0e-9)
-
-    baseline_cz_pulses, _, _ = instantiate_operation_recipe(
-        "cz",
-        [0, 1],
-        start_ns=0.0,
-        hw={**hw, "double_qubit_gate_amp_scale": 1.0},
-    )
-    assert cz_pulses[0][1].amp == baseline_cz_pulses[0][1].amp * 0.5
+    with pytest.raises(ValueError, match="Legacy pulse schema"):
+        instantiate_operation_recipe(
+            "cz",
+            [0, 1],
+            start_ns=0.0,
+            hw={"double_qubit_gate_amp_scale": 0.5},
+        )
 
 
 def test_cz_recipe_uses_connection_max_effective_coupling_when_present():
     hw = {
         "double_qubit_gate_duration_ns": 80.0,
-        "double_qubit_gate_amp_scale": 0.5,
         "rect_edge_ns": 2.0,
         "connections": [
             {
@@ -120,17 +96,16 @@ def test_cz_recipe_uses_connection_max_effective_coupling_when_present():
         ],
     }
 
-    cz_pulses, _, _ = instantiate_operation_recipe("cz", [0, 1], start_ns=0.0, hw=hw, tc_channel="TC_q0_q1")
+    cz_pulses, _, _ = instantiate_operation_recipe("cz", [0, 1], start_ns=0.0, hw=hw, tc_channel="TC_0_1")
 
     assert len(cz_pulses) == 1
-    assert cz_pulses[0][1].amp == pytest.approx(math.pi * 20.0e6)
+    assert cz_pulses[0][1].amp == pytest.approx(2.0 * math.pi * 20.0e6)
 
 
 def test_default_lowering_preserves_connection_strength_for_cz():
     circuit = CircuitIR(num_qubits=2, schedule=build_serial_schedule([CircuitGate(name="cz", qubits=[0, 1])], num_qubits=2))
     hw = {
         "double_qubit_gate_duration_ns": 80.0,
-        "double_qubit_gate_amp_scale": 0.5,
         "rect_edge_ns": 2.0,
         "connections": [
             {
@@ -145,9 +120,9 @@ def test_default_lowering_preserves_connection_strength_for_cz():
 
     pulse_ir, _ = DefaultPulseLowering().lower(circuit, hw, BackendConfig())
 
-    tc_channel = next(channel for channel in pulse_ir.channels if channel.name == "TC_q0_q1")
+    tc_channel = next(channel for channel in pulse_ir.channels if channel.name == "TC_0_1")
     assert len(tc_channel.pulses) == 1
-    assert tc_channel.pulses[0].amp == pytest.approx(math.pi * 20.0e6)
+    assert tc_channel.pulses[0].amp == pytest.approx(2.0 * math.pi * 20.0e6)
 
 
 def test_lower_processes_schedule_debug_by_tick():
@@ -210,6 +185,43 @@ def test_typed_sx_recipe_uses_explicit_duration_amplitude_and_channel_override()
     assert pulses[0][1].params["beta"] == pytest.approx(0.09)
 
 
+def test_resolve_typed_gate_recipe_returns_family_dataclasses():
+    hw = {
+        "gates": {
+            "x": {"recipe_type": "x", "duration_ns": 28.0, "amplitude_Hz": 21.0e6},
+            "sx": {"recipe_type": "sx", "duration_ns": 28.0, "amplitude_Hz": 10.5e6},
+            "rx": {"recipe_type": "rx", "duration_ns": 30.0, "amplitude_Hz": 12.0e6},
+            "virtual_z": {"recipe_type": "virtual_z"},
+            "cz": {"recipe_type": "cz", "duration_ns": 52.0, "amplitude_Hz": 20.0e6},
+            "measure": {
+                "recipe_type": "measure",
+                "segments": [{"duration_ns": 40.0, "amplitude": 1400.0}],
+            },
+        },
+        "channel_overrides": {"XY_0": {"sx": {"duration_ns": 26.0}}},
+    }
+
+    x_recipe = resolve_typed_gate_recipe(hw, "x", channel_name="XY_0")
+    sx_recipe = resolve_typed_gate_recipe(hw, "sx", channel_name="XY_0")
+    rx_recipe = resolve_typed_gate_recipe(hw, "rx", channel_name="XY_0")
+    z_recipe = resolve_typed_gate_recipe(hw, "rz")
+    cz_recipe = resolve_typed_gate_recipe(hw, "cz", channel_name="TC_0_1")
+    measure_recipe = resolve_typed_gate_recipe(hw, "measure", channel_name="RO_0")
+
+    assert isinstance(x_recipe, DrivenSingleQubitRecipe)
+    assert isinstance(sx_recipe, DrivenSingleQubitRecipe)
+    assert isinstance(rx_recipe, DrivenSingleQubitRecipe)
+    assert x_recipe.logical_gate == "x"
+    assert sx_recipe.logical_gate == "sx"
+    assert rx_recipe.logical_gate == "rx"
+    assert sx_recipe.duration_ns == pytest.approx(26.0)
+    assert isinstance(z_recipe, VirtualPhaseGateRecipe)
+    assert z_recipe.logical_gate == "rz"
+    assert isinstance(cz_recipe, CouplerTwoQubitRecipe)
+    assert isinstance(measure_recipe, MeasureRecipe)
+    assert measure_recipe.duration_ns == pytest.approx(40.0)
+
+
 def test_typed_cz_and_virtual_z_recipes_use_new_schema():
     hw = {
         "gates": {
@@ -255,3 +267,14 @@ def test_typed_measure_recipe_emits_segmented_readout():
     assert len(ro_channel.pulses) == 2
     assert ro_channel.pulses[0].amp == pytest.approx(1400.0)
     assert ro_channel.pulses[1].amp == pytest.approx(200.0)
+
+
+def test_virtual_z_rejects_duration_or_amplitude_fields():
+    with pytest.raises(ValueError, match="forbidden VirtualZ pulse fields"):
+        instantiate_operation_recipe(
+            "rz",
+            [0],
+            gate_params=[math.pi / 4.0],
+            start_ns=0.0,
+            hw={"gates": {"virtual_z": {"recipe_type": "virtual_z", "duration_ns": 1.0}}},
+        )

@@ -1,6 +1,6 @@
 from musiq.circuit.normalize import normalize_circuit
 from musiq.common.schemas import CircuitGate, CircuitIR
-from musiq.schemas.circuit import build_serial_schedule
+from musiq.schemas.circuit import build_serial_schedule, flatten_schedule
 
 
 def test_normalize_circuit_lowercases_gate_names_and_preserves_shape():
@@ -18,7 +18,7 @@ def test_normalize_circuit_lowercases_gate_names_and_preserves_shape():
 
     normalized = normalize_circuit(circuit)
 
-    assert [gate.name for gate in normalized.gates] == ["h", "rz", "measure"]
+    assert [gate.name for gate in flatten_schedule(normalized.schedule)] == ["h", "rz", "measure"]
     assert normalized.schedule[0][0][0].name == "h"
     assert normalized.num_qubits == 2
     assert normalized.num_clbits == 1
@@ -49,4 +49,4 @@ def test_schedule_flattens_mirrored_two_qubit_gate_once():
         },
     )
 
-    assert [gate.name for gate in circuit.gates] == ["cz"]
+    assert [gate.name for gate in flatten_schedule(circuit.schedule)] == ["cz"]

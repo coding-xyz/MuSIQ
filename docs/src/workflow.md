@@ -1,43 +1,47 @@
-# 瀹搞儰缍斿ù浣瑰瘹閸?(Workflow Guide)
+# Workflow Guide
 
-`MuSIQ` 闁插洨鏁ゆ稉鈧稉顏嗙埠娑撯偓閻ㄥ嫨鈧椒浜掑Ο鈥崇€锋稉杞拌厬韫囧啰娈戞禒璺ㄦ埂瀹搞儰缍斿ù浣碘偓鍌涙拱閹稿洤宕℃禒瀣矝娴滃棔绮犻崚娑樼紦濡€崇€烽崚鐗堝⒔鐞涘苯鍨庨弸鎰畱鐎瑰本鏆ｉ悽鐔锋嚒閸涖劍婀￠妴?
-## 1. 閺嶅洤鍣禒璺ㄦ埂濞翠胶鈻?
+MuSIQ accepts resource-style inputs for circuits, solvers, devices, pulses, and
+analysers. The compiler refactor changes two important expectations:
 
-娑撯偓娑擃亜鍚€閸ㄥ娈戞禒璺ㄦ埂娴犺濮熼柆闈涙儕娴犮儰绗呭銉╊€冮敍?
+- circuit inputs are schedule-first
+- pulse inputs are typed gate recipes
 
-### 1.1 閸掓稑缂撳Ο鈥崇€?(Model Creation)
-娴ｈ法鏁?`create_model` 閸戣姤鏆熺亸鍡楁倗缁夊秹鍘ょ純顔芥瀮娴犺泛濮炴潪钘夊煂娑撯偓娑?`Model` 鐎电钖勬稉顓溾偓?
-- **鏉堟挸鍙?*閿涙矮鎹㈤崝锟犲帳缂?(`task_config`)閵嗕焦鐪扮憴锝呮珤闁板秶鐤?(`solver_config`)閵嗕浇顔曟径鍥帳缂?(`device_config`) 缁涘鈧?
-- **缂佹挻鐏?*閿涙矮绔存稉顏勫灥婵瀵茬€瑰本鐦惃?`Model` 鐎电钖勯敍灞藉瘶閸氼偅澧嶉張澶婄箑鐟曚胶娈戦柊宥囩枂閵?
+## Circuit Inputs
 
-### 1.2 閹笛嗩攽濮瑰倽袙 (Solving)
-闁俺绻冪拫鍐暏 `model.run_solver()` 閹?`model.run_study()`閿涘瞼閮寸紒鐔剁窗閹笛嗩攽娴犮儰绗呴崘鍛村劥闁炬崘鐭鹃敍?
-1. **缂傛牞鐦?*閿涙瓪Backend` 鐏?`ModelConfig` 鏉烆剚宕叉稉?`ModelSpec`閿涘牆鐓欏Ο鈥崇€烽敍澶婃嫲 `Pulse IR`閿涘牐鍓﹂崘韫厬闂傜銆冪粈鐚寸礆閵?
-2. **閹笛嗩攽**閿涙瓪Engine` 濞戝牐鍨?`ModelSpec` 楠炴儼绻嶇悰灞炬殶閸婇棿璞㈤惇鐔粹偓?
-3. **鐎涙ê鍋?*閿涙氨绮ㄩ弸婊嗩潶鐏忎浇顥婇崷?`RunResult` 娑擃叏绱濇潻鐐叉倱缂傛牞鐦ф禍褏澧挎稉鈧挧宄扮摠閸屻劌婀?`ModelRun` 娑擃叏绱濋獮鑸靛潑閸旂姴鍩?`model.runs` 鐎涙鍚€閵?
+You can provide either:
 
-### 1.3 閹笛嗩攽閸掑棙鐎?(Analysis)
-娴ｈ法鏁?`model.run_analysis()` 鐎甸€涚娑擃亝鍨ㄦ径姘嚋鏉╂劘顢戠紒鎾寸亯鏉╂稖顢戦崥搴☆槱閻炲棎鈧?
-- **鏉堟挸鍙?*閿涙艾鍨庨弸鎰珤 ID (`analyser_id`)閵?
-- **鏉╁洨鈻?*閿涙艾鍨庨弸鎰珤鐠囪褰?`model.runs` 娑擃厾娈?`Trajectory` 閺佺増宓侀敍宀冾吀缁犳瀵氶弽鍥风礄Metrics閿涘鈧?
-- **鐎涙ê鍋?*閿涙艾鍨庨弸鎰獓閻椻晛鐡ㄩ崒銊ユ躬 `ModelAnalysis` 鐎电钖勬稉顓ㄧ礉楠炶埖鍧婇崝鐘插煂 `model.analyses` 鐎涙鍚€閵?
+- `qasm_text` or `qasm_path`
+- direct schedule YAML with `format: circuit_layer_yaml`
 
-### 1.4 閹镐椒绠欓崠?(Persistence)
-娴ｈ法鏁?`model.save(path)` 鐏忓棙鏆ｆ稉顏吥侀崹瀣剁礄閸栧懏瀚幍鈧張澶愬帳缂冾喓鈧浇绻嶇悰宀冾唶瑜版洖鎷伴崚鍡樼€界紒鎾寸亯閿涘绻氱€涙ê鍩岀壕浣烘磸閵嗗倷绠ｉ崥搴″讲娴犮儵鈧俺绻?`load_model(path)` 韫囶偊鈧喐浠径宥勭窗鐠囨縿鈧?
+Schedule payloads must not be mixed with QASM fields in the same circuit file.
 
-## 2. 閺嶇绺?API 闁喐鐓?
+## Pulse Inputs
 
-| 閹垮秳缍?| API 閺傝纭?| 閹诲繗鍫?|
-| :--- | :--- | :--- |
-| **閸掓繂顫愰崠?* | `create_model(...)` | 娴犲孩鏋冩禒鑸电€?`Model` |
-| **閸楁洘顒炴潻鎰攽** | `model.run_study(...)` | 鏉╂劘顢戞稉鈧稉顏嗗鐎规氨娈戦惍鏃傗敀濮濄儵顎?|
-| **閸忋劑鍣哄Ч鍌澬?* | `model.run_solver(solver_id)` | 鏉╂劘顢戦幐鍥х暰濮瑰倽袙閸ｃ劎娈戦幍鈧張澶嬵劄妤?|
-| **閹笛嗩攽閸掑棙鐎?* | `model.run_analysis(...)` | 鏉╂劘顢戦幐鍥х暰閻ㄥ嫬鍨庨弸鎰珤 |
-| **娑撯偓闁款喛绻嶇悰?* | `model.run_all()` | 鏉╂劘顢戦幍鈧張澶嬬湴鐟欙絽娅?$\rightarrow$ 閹碘偓閺堝鍨庨弸鎰珤 |
-| **娣囨繂鐡?閸旂姾娴?* | `model.save()` / `load_model()` | 濡€崇€烽幐浣风畽閸?|
+Pulse files are gate-first:
 
-## 3. 缂佹挻鐏夌拋鍧楁６
+```yaml
+schema_version: "1.0"
+pulse:
+  defaults: {}
+  gates: {}
+  channel_overrides: {}
+```
 
-娴ｇ姴褰叉禒銉┾偓姘崇箖 `Model` 閹绘劒绶甸惃鍕┒閹归攱鏌熷▔鏇☆問闂傤喗娓剁紒鍫㈢波閺嬫粣绱?
-- **閼惧嘲褰囨潪銊ㄦ姉**閿涙瓪model.get_trajectory(solver_id=..., study_name=...)`
-- **閼惧嘲褰囬崚鍡樼€界紒鎾寸亯**閿涙瓪model.get_analysis(analyser_id=..., study_name=...)`
+Legacy pulse files based on `channels`/`carriers`/`waveforms`/`operations` are
+rejected.
+
+## Runtime Flow
+
+1. Load circuit, solver, device, pulse, and analyser resources.
+2. Build a runtime `Task`.
+3. Normalize the circuit into `CircuitIR`.
+4. Schedule logical gates from `CircuitIR.schedule`.
+5. Resolve typed pulse recipes and lower to `PulseIR`.
+6. Compile pulses and build `ModelSpec`.
+7. Run the selected engine.
+8. Run configured analyses.
+
+## CLI Notes
+
+For file-driven execution, prefer resource configs over ad hoc inline fields.
+That keeps typed schemas explicit and makes runs easier to reproduce.

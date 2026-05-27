@@ -284,6 +284,18 @@ def _shot_trace_integrated_iq(
         return _integrate_window(times, np.real(heterodyne), np.imag(heterodyne), t0, t1)
     return None
 
+
+def _pulse_cfg_payload(pulse_cfg: dict[str, Any]) -> dict[str, Any]:
+    """Support both direct pulse payloads and workflow configs nested under ``pulse``."""
+    nested = pulse_cfg.get("pulse")
+    payload = dict(nested) if isinstance(nested, dict) else dict(pulse_cfg)
+    acquisition = dict(payload.get("acquisition", {}) or {})
+    acquisition_extras = dict(acquisition.pop("extras", {}) or {})
+    if acquisition_extras:
+        acquisition = {**acquisition, **acquisition_extras}
+    payload["acquisition"] = acquisition
+    return payload
+
 def build_readout_analysis(
     *,
     trajectory,
@@ -303,6 +315,7 @@ def build_readout_analysis(
     
     pulse_cfg_dict = p_cfg
     device_cfg_dict = d_cfg
+    pulse_payload = _pulse_cfg_payload(pulse_cfg_dict)
 
     device_payload = dict(device_cfg_dict.get("device", {}) or {}) if isinstance(device_cfg_dict.get("device"), dict) else dict(device_cfg_dict)
     
@@ -345,7 +358,7 @@ def build_readout_analysis(
         complex_envelope=a_out,
         pulse_ir=pulse_ir,
         readout_cfg=receiver_fake_cfg,
-        pulse_cfg=pulse_cfg_dict,
+        pulse_cfg=pulse_payload,
         chain=ro0_params,
         rng=rng,
     )
@@ -354,11 +367,11 @@ def build_readout_analysis(
     digital_baseband = np.asarray(receiver.get("digital_baseband", []), dtype=complex)
     
     measure_windows = _extract_readout_windows(pulse_ir)
-    integration_window_s = _safe_float((pulse_cfg_dict.get("acquisition", {}) or {}).get("integration_window_ns", 0.0), 0.0) * 1.0e-9
-    start_delay_s = _safe_float((pulse_cfg_dict.get("acquisition", {}) or {}).get("start_delay_ns", 0.0), 0.0) * 1.0e-9
+    integration_window_s = _safe_float((pulse_payload.get("acquisition", {}) or {}).get("integration_window_ns", 0.0), 0.0) * 1.0e-9
+    start_delay_s = _safe_float((pulse_payload.get("acquisition", {}) or {}).get("start_delay_ns", 0.0), 0.0) * 1.0e-9
     
     if integration_window_s <= 0.0:
-        integration_window_s = _safe_float(pulse_cfg_dict.get("measure_duration_ns", 0.0), 0.0) * 1.0e-9
+        integration_window_s = _safe_float(pulse_payload.get("measure_duration_ns", 0.0), 0.0) * 1.0e-9
 
     integrated_iq = None
     if measure_windows and digital_baseband.size > 0:

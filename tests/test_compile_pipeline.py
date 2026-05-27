@@ -2,14 +2,14 @@ import json
 
 from musiq.backend.compile_pipeline import CompilePipeline
 from musiq.common.schemas import BackendConfig, CircuitGate, CircuitIR
-from musiq.schemas.circuit import build_serial_schedule
+from musiq.schemas.circuit import build_serial_schedule, flatten_schedule
 
 
 class AppendBarrierPass:
     def run(self, circuit: CircuitIR, ctx: dict) -> CircuitIR:
         assert ctx["config"].solver == "me"
         assert ctx["hardware"] == {"schedule_policy": "serial"}
-        gates = [*circuit.gates, CircuitGate(name="barrier", qubits=[])]
+        gates = [*flatten_schedule(circuit.schedule), CircuitGate(name="barrier", qubits=[])]
         return CircuitIR(
             schema_version=circuit.schema_version,
             format=circuit.format,
@@ -32,7 +32,7 @@ def test_compile_pipeline_default_run_normalizes_and_reports():
 
     normalized, report = CompilePipeline().run(circuit, config)
 
-    assert [gate.name for gate in normalized.gates] == ["h", "rz"]
+    assert [gate.name for gate in flatten_schedule(normalized.schedule)] == ["h", "rz"]
     assert report["initial_gate_count"] == 2
     assert report["final_gate_count"] == 2
     assert report["passes"] == [{"name": "NormalizePass", "before": 2, "after": 2}]
@@ -46,7 +46,7 @@ def test_compile_pipeline_supports_custom_passes():
 
     lowered, report = pipeline.run(circuit, config, hardware={"schedule_policy": "serial"})
 
-    assert [gate.name for gate in lowered.gates] == ["x", "barrier"]
+    assert [gate.name for gate in flatten_schedule(lowered.schedule)] == ["x", "barrier"]
     assert report["passes"] == [{"name": "AppendBarrierPass", "before": 1, "after": 2}]
     assert report["final_gate_count"] == 2
     assert report["hardware_used"] is True

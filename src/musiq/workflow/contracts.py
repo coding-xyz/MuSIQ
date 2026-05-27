@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
+from pathlib import Path
 from typing import Any
 
 from musiq.common.schemas import BackendConfig
@@ -134,6 +135,52 @@ class CircuitConfig:
     qasm_text: str | None = None
     circuit_ir: CircuitIR | None = None
     param_bindings: dict[str, float] | None = None
+
+    @classmethod
+    def from_schedule_payload(
+        cls,
+        schedule_or_payload: dict[str, Any],
+        *,
+        num_qubits: int | None = None,
+        num_clbits: int | None = None,
+        schema_version: str = "1.0",
+        format: str = "circuit_layer_yaml",
+        param_bindings: dict[str, float] | None = None,
+    ) -> "CircuitConfig":
+        """Build a ``CircuitConfig`` from a raw schedule mapping or schedule payload."""
+        from musiq.workflow.task_io import circuit_from_schedule_payload
+
+        return circuit_from_schedule_payload(
+            schedule_or_payload,
+            num_qubits=num_qubits,
+            num_clbits=num_clbits,
+            schema_version=schema_version,
+            format=format,
+            param_bindings=param_bindings,
+        )
+
+    @classmethod
+    def from_schedule_file(
+        cls,
+        path: str | Path,
+        *,
+        num_qubits: int | None = None,
+        num_clbits: int | None = None,
+        schema_version: str = "1.0",
+        format: str = "circuit_layer_yaml",
+        param_bindings: dict[str, float] | None = None,
+    ) -> "CircuitConfig":
+        """Load a raw schedule YAML/JSON file into a ``CircuitConfig``."""
+        from musiq.workflow.task_io import load_circuit_schedule_file
+
+        return load_circuit_schedule_file(
+            path,
+            num_qubits=num_qubits,
+            num_clbits=num_clbits,
+            schema_version=schema_version,
+            format=format,
+            param_bindings=param_bindings,
+        )
 
 
 @dataclass(slots=True)
@@ -492,10 +539,11 @@ def filter_composite_device_for_step(device: dict | None, step: dict | None) -> 
         filtered_connections = [conn for conn in filtered_connections if str(conn.get("id", "")) in active_connections]
 
     implied_component_ids: set[str] = set()
-    for conn in filtered_connections:
-        implied_component_ids.update(
-            {x for x in (str(conn.get("a", "")), str(conn.get("b", "")), str(conn.get("via", ""))) if x}
-        )
+    if active_connections:
+        for conn in filtered_connections:
+            implied_component_ids.update(
+                {x for x in (str(conn.get("a", "")), str(conn.get("b", "")), str(conn.get("via", ""))) if x}
+            )
     kept_component_ids = set(active_components) | implied_component_ids
     if kept_component_ids:
         components = [comp for comp in components if str(comp.get("id", "")) in kept_component_ids]

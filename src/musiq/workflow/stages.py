@@ -8,7 +8,7 @@ from copy import deepcopy
 from musiq.analysis.metrics import resolve_metrics_payload
 from musiq.analysis.dispatcher import dispatch_analysis
 from musiq.schemas.results import CaseAnalysis
-from musiq.schemas.circuit import build_serial_schedule
+from musiq.schemas.circuit import build_serial_schedule, flatten_schedule
 from musiq.analysis.sensitivity import build_error_budget_v2, build_sensitivity_report
 from musiq.backend.compile_pipeline import CompilePipeline
 from musiq.backend.config import load_backend_config
@@ -64,7 +64,11 @@ def _apply_study_prep_sequence_to_qasm(qasm_text: str, prep_sequence) -> str:
         return qasm_text
     circuit = CircuitAdapter.from_qasm(qasm_text)
     prep_gates = [_prep_gate_from_spec(item, num_qubits=circuit.num_qubits) for item in sequence]
-    measure_gates = [deepcopy(gate) for gate in list(circuit.gates or []) if str(gate.name).strip().lower() == "measure"]
+    measure_gates = [
+        deepcopy(gate)
+        for gate in flatten_schedule(circuit.schedule)
+        if str(gate.name).strip().lower() == "measure"
+    ]
     circuit.schedule = build_serial_schedule(prep_gates + measure_gates, num_qubits=circuit.num_qubits)
     circuit.source_qasm = to_qasm(circuit)
     return circuit.source_qasm
@@ -75,7 +79,11 @@ def _apply_study_prep_sequence_to_circuit(circuit: object, prep_sequence) -> obj
     if not sequence:
         return circuit
     prep_gates = [_prep_gate_from_spec(item, num_qubits=circuit.num_qubits) for item in sequence]
-    measure_gates = [deepcopy(gate) for gate in list(circuit.gates or []) if str(gate.name).strip().lower() == "measure"]
+    measure_gates = [
+        deepcopy(gate)
+        for gate in flatten_schedule(circuit.schedule)
+        if str(gate.name).strip().lower() == "measure"
+    ]
     circuit.schedule = build_serial_schedule(prep_gates + measure_gates, num_qubits=circuit.num_qubits)
     if getattr(circuit, "source_qasm", ""):
         circuit.source_qasm = to_qasm(circuit)

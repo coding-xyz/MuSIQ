@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from musiq.common.schemas import CircuitGate, CircuitIR
+from musiq.pulse.catalog import resolve_typed_gate_recipe
 
 
 def _gate_family(name: str) -> str:
@@ -23,17 +24,8 @@ def _gate_family(name: str) -> str:
 
 
 def _typed_gate_recipe_duration_ns(gate: CircuitGate, hw: dict[str, Any]) -> float | None:
-    gates = dict(hw.get("gates", {}) or {})
-    if not gates:
-        return None
-
     gate_name = str(gate.name).strip().lower()
     qubits = [int(q) for q in list(gate.qubits or [])]
-    if gate_name in {"z", "rz"}:
-        gate_aliases = ["virtual_z", gate_name]
-    else:
-        gate_aliases = [gate_name]
-
     channel_name: str | None = None
     if gate_name in {"x", "sx", "rx", "ry", "h"} and qubits:
         channel_name = f"XY_{qubits[0]}"
@@ -42,35 +34,10 @@ def _typed_gate_recipe_duration_ns(gate: CircuitGate, hw: dict[str, Any]) -> flo
     elif gate_name in {"cz", "cx"} and qubits:
         channel_name = _tc_channel_name(qubits)
 
-    recipe: dict[str, Any] | None = None
-    for candidate in gate_aliases:
-        raw_recipe = gates.get(candidate)
-        if isinstance(raw_recipe, dict):
-            recipe = dict(raw_recipe)
-            break
+    recipe = resolve_typed_gate_recipe(hw, gate_name, channel_name=channel_name)
     if recipe is None:
         return None
-
-    if channel_name:
-        raw_overrides = dict(hw.get("channel_overrides", {}) or {})
-        channel_overrides = raw_overrides.get(channel_name)
-        if isinstance(channel_overrides, dict):
-            for candidate in gate_aliases:
-                override_recipe = channel_overrides.get(candidate)
-                if isinstance(override_recipe, dict):
-                    recipe = {**recipe, **dict(override_recipe)}
-                    break
-
-    recipe_type = str(recipe.get("recipe_type", gate_aliases[0] if gate_aliases else gate_name)).strip().lower()
-    if recipe_type == "virtual_z":
-        return 0.0
-    if recipe_type == "measure":
-        segments = list(recipe.get("segments", []) or [])
-        if segments:
-            return float(sum(float(seg.get("duration_ns", 0.0) or 0.0) for seg in segments))
-    if "duration_ns" in recipe:
-        return float(recipe.get("duration_ns", 0.0) or 0.0)
-    return None
+    return float(recipe.duration_ns)
 
 
 def _gate_duration_ns(gate: CircuitGate, hw: dict[str, Any]) -> float:
@@ -122,7 +89,7 @@ def _pair_key(qubits: list[int]) -> tuple[int, int]:
 
 def _tc_channel_name(qubits: list[int]) -> str:
     i, j = _pair_key(qubits)
-    return f"TC_q{i}_q{j}"
+    return f"TC_{i}_{j}"
 
 
 def _gate_resources(gate: CircuitGate, *, tc_channel: str | None = None) -> set[str]:

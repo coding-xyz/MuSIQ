@@ -1,0 +1,189 @@
+schema_version: "3.0"
+device:
+  components:
+    - id: q0
+      type: transmon
+      description: qubit 0 of linear chain
+      ports:
+        drive: drive_port_0
+      parameters:
+        freq_Hz: 4.910e9
+        anharmonicity_Hz: -2.00e8
+      noise: 
+        T1_s: 26.0e-6
+        Tphi_s: 22.0e-6
+    - id: q1
+      type: transmon
+      description: qubit 1 of linear chain
+      ports:
+        drive: drive_port_1
+      parameters:
+        freq_Hz: 4.930e9
+        anharmonicity_Hz: -1.98e8
+      noise: 
+        T1_s: 25.2e-6
+        Tphi_s: 21.5e-6
+    - id: q2
+      type: transmon
+      description: qubit 2 of linear chain
+      ports:
+        drive: drive_port_2
+      parameters:
+        freq_Hz: 4.950e9
+        anharmonicity_Hz: -2.02e8
+      noise: 
+        T1_s: 27.1e-6
+        Tphi_s: 23.1e-6
+    - id: q3
+      type: transmon
+      description: qubit 3 of linear chain
+      ports:
+        drive: drive_port_3
+      parameters:
+        freq_Hz: 4.970e9
+        anharmonicity_Hz: -1.97e8
+      noise: 
+        T1_s: 24.8e-6
+        Tphi_s: 20.8e-6
+    - id: q4
+      type: transmon
+      description: qubit 4 of linear chain
+      ports:
+        drive: drive_port_4
+      parameters:
+        freq_Hz: 4.990e9
+        anharmonicity_Hz: -2.01e8
+      noise: 
+        T1_s: 26.5e-6
+        Tphi_s: 22.4e-6
+    - id: q5
+      type: transmon
+      description: qubit 5 of linear chain
+      ports:
+        drive: drive_port_5
+      parameters:
+        freq_Hz: 5.010e9
+        anharmonicity_Hz: -1.99e8
+      noise: 
+        T1_s: 25.5e-6
+        Tphi_s: 21.2e-6
+    - id: q6
+      type: transmon
+      description: qubit 6 of linear chain
+      ports:
+        drive: drive_port_6
+      parameters:
+        freq_Hz: 5.030e9
+        anharmonicity_Hz: -2.03e8
+      noise: 
+        T1_s: 28.0e-6
+        Tphi_s: 24.0e-6
+    - id: q7
+      type: transmon
+      description: qubit 7 of linear chain
+      ports:
+        drive: drive_port_7
+      parameters:
+        freq_Hz: 5.050e9
+        anharmonicity_Hz: -1.96e8
+      noise: 
+        T1_s: 24.2e-6
+        Tphi_s: 20.1e-6
+    - id: q8
+      type: transmon
+      description: qubit 8 of linear chain
+      ports:
+        drive: drive_port_8
+      parameters:
+        freq_Hz: 5.070e9
+        anharmonicity_Hz: -2.01e8
+      noise: 
+        T1_s: 26.1e-6
+        Tphi_s: 22.8e-6
+    - id: q9
+      type: transmon
+      description: qubit 9 of linear chain
+      ports:
+        drive: drive_port_9
+      parameters:
+        freq_Hz: 5.090e9
+        anharmonicity_Hz: -1.99e8
+      noise: 
+        T1_s: 25.8e-6
+        Tphi_s: 21.9e-6
+  connections:
+    - id: zz_q0_q1
+      type: zz
+      a: q0
+      b: q1
+      parameters:
+        max_effective_coupling_Hz: 10.0e6
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q1_q2
+      type: zz
+      a: q1
+      b: q2
+      parameters:
+        max_effective_coupling_Hz: 20.0e6
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q2_q3
+      type: zz
+      a: q2
+      b: q3
+      parameters:
+        max_effective_coupling_Hz: 20.0e6
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q3_q4
+      type: zz
+      a: q3
+      b: q4
+      parameters:
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q4_q5
+      type: zz
+      a: q4
+      b: q5
+      parameters:
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q5_q6
+      type: zz
+      a: q5
+      b: q6
+      parameters:
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q6_q7
+      type: zz
+      a: q6
+      b: q7
+      parameters:
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q7_q8
+      type: zz
+      a: q7
+      b: q8
+      parameters:
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
+    - id: zz_q8_q9
+      type: zz
+      a: q8
+      b: q9
+      parameters:
+        max_effective_coupling_Hz: 0.0
+      noise:
+        residual_zz_Hz: 0.0
+  simulation_level: nlevel
+  control_scale: 1.0
+  noise: {}

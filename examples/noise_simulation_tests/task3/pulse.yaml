@@ -1,59 +1,30 @@
-schema_version: "3.0"
+schema_version: "1.0"
 pulse:
-  channels:
-    - name: RO_r0
-      kind: readout_drive
-      target: r0
-      port: ro_in
-    - name: LO_r0
-      kind: readout_lo
-      target: ro0
-      port: line_in
+  defaults:
+    xy_carrier_freq_Hz: 5.0e9
+    ro_carrier_freq_Hz: 6.5e9
+    schedule_policy: serial
 
-  carriers:
-    RO_r0:
-      freq_Hz: 6.450e9
-      phase_rad: 0.0
-    LO_r0:
-      freq_Hz: 5.800e9
-      phase_rad: -1.5707963267948966
+  gates:
+    x:
+      recipe_type: x
+      shape: drag
+      duration_ns: 20.0
+      amplitude_Hz: 12.5e6
+      carrier_freq_Hz: 5.0e9
+      sigma_fraction: 0.2
+      drag_beta: 0.35
 
-  waveforms:
-    readout_kick:
-      shape: readout
-      duration_ns: 60.0
-      edge_ns: 0.0
-    readout_hold:
-      shape: readout
-      duration_ns: 260.0
-      edge_ns: 0.0
+    sx:
+      recipe_type: sx
+      shape: drag
+      duration_ns: 20.0
+      amplitude_Hz: 6.25e6
+      carrier_freq_Hz: 5.0e9
+      sigma_fraction: 0.2
+      drag_beta: 0.35
 
-  operations:
-    measure:
-      - channel: RO_r0
-        waveform: readout_kick
-        scale: 5000.0
-      - channel: RO_r0
-        waveform: readout_hold
-        scale: 800.0
+    virtual_z:
+      recipe_type: virtual_z
 
-  schedule:
-    policy: serial
-
-  acquisition:
-    mode: heterodyne
-    integration_window_ns: 300.0
-    start_delay_ns: 20.0
-    demodulation:
-      lo_channel: LO_r0
-      if_Hz: 650.0e6
-      phase_rad: 0.0
-    iq_discrimination:
-      enabled: true
-      method: linear_discriminant
-      labels: ["1"]
-    noise_analysis:
-      enabled: true
-      estimate_snr: true
-      estimate_cluster_spread: true
-      estimate_assignment_error: true
+  acquisition: {}
