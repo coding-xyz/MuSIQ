@@ -26,7 +26,7 @@ def _basis_labels(dimension: int, num_qubits: int, levels: int) -> list[str]:
                 for _ in range(num_qubits):
                     digits.append(str(rem % levels))
                     rem //= levels
-                labels.append("".join(reversed(digits)))
+                labels.append("".join(digits))
             return labels
     return [str(i) for i in range(dimension)]
 

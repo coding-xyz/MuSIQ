@@ -37,6 +37,8 @@ MuSIQ is a workflow-first quantum simulation project with reproducible artifacts
 
 - Circuit import/export (`OpenQASM`, optional Qiskit adapters)
 - Compile + lowering pipeline (`CircuitIR -> PulseIR -> ExecutableModel -> ModelSpec`)
+- Schedule-first circuit IR (`CircuitIR.schedule`)
+- Typed pulse recipes under `pulse.defaults`, `pulse.gates`, and `pulse.channel_overrides`
 - Engine-neutral `ModelSpec` IR with typed system, Hamiltonian, noise, and readout sections
 - Simulation engines (`qutip`, `qoptics`, `qtoolbox`)
 - QEC pipeline:
@@ -134,8 +136,22 @@ mkdocs serve
 - Repository text encoding policy: use UTF-8 for source, docs, issues, and configuration files.
 - Editor and Git normalization rules live in `.editorconfig` and `.gitattributes`.
 - Markdown sources: `docs/src/`
-- Wiki entry: `docs/src/WIKI.md`
-- ModelSpec IR guide: `docs/src/wiki/model_spec.md`
+- Typed pulse schema guide: `docs/src/wiki/pulse_schema.md`
+- Schedule circuit IR guide: `docs/src/wiki/circuit_ir.md`
+
+## Compiler Contracts
+
+The compiler-facing resource formats are now:
+
+- circuits:
+  - OpenQASM input, or
+  - direct schedule YAML with `format: circuit_layer_yaml`
+- pulses:
+  - typed gate-first config under `pulse.defaults`, `pulse.gates`, and `pulse.channel_overrides`
+
+Legacy pulse schemas based on `channels` / `carriers` / `waveforms` /
+`operations`, as well as legacy `amp_scale` recipe semantics, are intentionally
+rejected.
 
 ## Text Encoding
 

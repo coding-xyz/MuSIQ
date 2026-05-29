@@ -1070,6 +1070,10 @@ def instantiate_operation_recipe(
     elif plan is None and gate == "barrier":
         plan = OperationPlan(duration_ns=0.0)
     elif plan is None:
-        plan = OperationPlan(duration_ns=float(cfg["single_qubit_gate_duration_ns"]))
+        supported = sorted([*_DRIVEN_SINGLE_QUBIT_SPECS.keys(), "barrier", "cz", "cx", "id", "measure", "reset", "rz", "z"])
+        raise ValueError(
+            f"Unsupported gate for pulse lowering: {gate}. "
+            f"Supported gates: {', '.join(supported)}"
+        )
 
     return _materialize_operation_plan(plan), float(plan.duration_ns), [dict(item) for item in plan.events]

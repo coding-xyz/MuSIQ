@@ -81,6 +81,11 @@ def test_legacy_amp_scale_fields_are_rejected():
         )
 
 
+def test_unknown_gate_is_rejected_instead_of_silent_idle():
+    with pytest.raises(ValueError, match="Unsupported gate for pulse lowering: rxx"):
+        instantiate_operation_recipe("rxx", [0, 1], gate_params=[0.25], start_ns=0.0, hw={})
+
+
 def test_cz_recipe_uses_connection_max_effective_coupling_when_present():
     hw = {
         "double_qubit_gate_duration_ns": 80.0,
