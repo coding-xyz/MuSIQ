@@ -11,6 +11,14 @@ class QutipSerializationMixin:
     """Serialize QuTiP states, measurements, and complex-valued series."""
 
     @staticmethod
+    def _normalize_state_runs(raw_states) -> list[list[Any]]:
+        state_runs: list[list[Any]] = []
+        for run in list(raw_states or []):
+            if isinstance(run, list) and run:
+                state_runs.append(list(run))
+        return state_runs
+
+    @staticmethod
     def _measurement_to_real_series(measurement, nt: int) -> np.ndarray:
         arr = np.asarray(measurement)
         if np.iscomplexobj(arr):
@@ -95,13 +103,14 @@ class QutipSerializationMixin:
         if requested_kind not in {"wave_function", "density_matrix"}:
             return None
         raw_states = list(getattr(result, "states", []) or [])
-        if not raw_states and solver == "mcwf":
-            runs_states = list(getattr(result, "runs_states", []) or [])
-            raw_states = list(runs_states[:1] or [])
-            if raw_states and isinstance(raw_states[0], list):
-                raw_states = list(raw_states[0])
+        state_runs: list[list[Any]] = []
+        if solver == "mcwf":
+            state_runs = cls._normalize_state_runs(getattr(result, "runs_states", []))
+            if state_runs:
+                raw_states = list(state_runs[0])
         if raw_states and isinstance(raw_states[0], list):
-            raw_states = list(raw_states[0])
+            state_runs = cls._normalize_state_runs(raw_states)
+            raw_states = list(state_runs[0]) if state_runs else list(raw_states[0])
         if not raw_states:
             return None
         serialized = [cls._serialize_qobj_state(state) for state in raw_states]
@@ -110,13 +119,20 @@ class QutipSerializationMixin:
             note = "requested wave_function but solver returned density_matrix"
         else:
             note = ""
-        return {
+        payload = {
             "requested_kind": requested_kind or actual_kind,
             "actual_kind": actual_kind,
             "encoding": "complex",
             "snapshots": [item.get("data", []) for item in serialized],
             "note": note,
         }
+        if state_runs:
+            payload["runs"] = [
+                [item.get("data", []) for item in [cls._serialize_qobj_state(state) for state in run]]
+                for run in state_runs
+            ]
+            payload["num_runs"] = len(state_runs)
+        return payload
 
     @staticmethod
     def _average_qobj_sequences(sequences: list[list[Any]]) -> list[Any]:

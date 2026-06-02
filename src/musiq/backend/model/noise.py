@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from musiq.backend.config import DeviceConfig, NoiseConfig
-from musiq.backend.model.common import TWO_PI, expand_value, qubit_field
+from musiq.backend.model.common import TWO_PI
 from musiq.common.schemas import (
     CollapseChannelSpec,
     ControlCrosstalkSpec,
@@ -15,19 +15,6 @@ from musiq.common.schemas import (
     ReadoutCrosstalkSpec,
     StochasticChannelSpec,
 )
-
-
-def _local_or_device(noise: NoiseConfig, hw: DeviceConfig, key: str, qubit_default: object) -> object:
-    noise_value = getattr(noise.local, key)
-    if noise_value is not None:
-        return noise_value
-    device_value = getattr(hw, key)
-    return qubit_default if device_value is None else device_value
-
-
-def _stochastic_value(noise: NoiseConfig, key: str, default: object) -> object:
-    value = getattr(noise.stochastic, key)
-    return default if value is None else value
 
 
 def _noise_model(noise: NoiseConfig) -> str:
@@ -131,8 +118,8 @@ def _source_targets(source: NoiseSourceSpec, component_index: dict[str, int], nu
 
 
 def _source_rate_Hz(source: NoiseSourceSpec, key: str) -> float:
-    rate = dict(source.rate or {})
-    value = rate.get(key)
+    parameters = dict(source.parameters or {})
+    value = parameters.get(key)
     if value is None:
         return 0.0
     return max(0.0, float(value))
@@ -142,8 +129,8 @@ def _source_T_rate_Hz(source: NoiseSourceSpec, t_key: str, gamma_key: str) -> fl
     gamma = _source_rate_Hz(source, gamma_key)
     if gamma > 0.0:
         return gamma
-    rate = dict(source.rate or {})
-    T = float(rate.get(t_key, 0.0) or 0.0)
+    parameters = dict(source.parameters or {})
+    T = float(parameters.get(t_key, 0.0) or 0.0)
     return 1.0 / T if T > 0.0 else 0.0
 
 
@@ -247,80 +234,33 @@ def lower_noise(
         if component.id:
             component_index[str(component.id)] = idx
     authored_sources, control_crosstalk, readout_crosstalk = _collect_authored_sources(noise, hw)
-    legacy_sources: list[NoiseSourceSpec] = []
-
-    qubit_gamma1 = qubit_field(raw_qubits, "gamma1_Hz", 0.0) if raw_qubits else None
-    qubit_gamma_phi = qubit_field(raw_qubits, "gamma_phi_Hz", 0.0) if raw_qubits else None
-    qubit_gamma_up = qubit_field(raw_qubits, "gamma_up_Hz", 0.0) if raw_qubits else None
-    qubit_T1 = qubit_field(raw_qubits, "T1_s", 0.0) if raw_qubits else None
-    qubit_T2 = qubit_field(raw_qubits, "T2_s", 0.0) if raw_qubits else None
-    qubit_Tphi = qubit_field(raw_qubits, "Tphi_s", 0.0) if raw_qubits else None
-    qubit_Tup = qubit_field(raw_qubits, "Tup_s", 0.0) if raw_qubits else None
-
-    gamma1_cfg = expand_value(_local_or_device(noise, hw, "gamma1_Hz", qubit_gamma1 or 0.0), num_qubits, 0.0)
-    gamma_phi_cfg = expand_value(_local_or_device(noise, hw, "gamma_phi_Hz", qubit_gamma_phi or 0.0), num_qubits, 0.0)
-    gamma_up_cfg = expand_value(_local_or_device(noise, hw, "gamma_up_Hz", qubit_gamma_up or 0.0), num_qubits, 0.0)
-    T1_cfg = expand_value(_local_or_device(noise, hw, "T1_s", qubit_T1), num_qubits, 0.0)
-    T2_cfg = expand_value(_local_or_device(noise, hw, "T2_s", qubit_T2), num_qubits, 0.0)
-    Tphi_cfg = expand_value(_local_or_device(noise, hw, "Tphi_s", qubit_Tphi), num_qubits, 0.0)
-    Tup_cfg = expand_value(_local_or_device(noise, hw, "Tup_s", qubit_Tup), num_qubits, 0.0)
-
     collapse_ops: list[CollapseChannelSpec] = []
+    stochastic_noise: list[StochasticChannelSpec] = []
+    selected_model = _noise_model(noise)
+
+    _append_source_realizations(
+        sources=authored_sources,
+        component_index=component_index,
+        num_qubits=num_qubits,
+        collapse_ops=collapse_ops,
+        stochastic_noise=stochastic_noise,
+    )
     per_qubit_rates: list[PerQubitRateSpec] = []
     for q in range(num_qubits):
-        g1 = max(0.0, float(gamma1_cfg[q]))
-        gphi = max(0.0, float(gamma_phi_cfg[q]))
-        gup = max(0.0, float(gamma_up_cfg[q]))
-        T1 = float(T1_cfg[q])
-        T2 = float(T2_cfg[q])
-        Tphi = float(Tphi_cfg[q])
-        Tup = float(Tup_cfg[q])
-        if g1 <= 0.0 and T1 > 0.0:
-            g1 = 1.0 / T1
-        if gup <= 0.0 and Tup > 0.0:
-            gup = 1.0 / Tup
-        if gphi <= 0.0:
-            if Tphi > 0.0:
-                gphi = 1.0 / Tphi
-            elif T2 > 0.0:
-                gphi = max(0.0, (1.0 / T2) - 0.5 * (g1 + gup))
-
-        if g1 > 0:
-            collapse_ops.append(CollapseChannelSpec(target=q, kind="relaxation", rate_Hz=g1, rate_rad_s=TWO_PI * g1))
-            legacy_sources.append(
-                NoiseSourceSpec(
-                    id=f"q{q}_legacy_T1",
-                    kind="markovian",
-                    targets=[f"q{q}"],
-                    operator="lowering",
-                    rate={"gamma1_Hz": g1},
-                    metadata={"source": "legacy_local_rate"},
-                )
-            )
-        if gphi > 0:
-            collapse_ops.append(CollapseChannelSpec(target=q, kind="dephasing", rate_Hz=gphi, rate_rad_s=TWO_PI * gphi))
-            legacy_sources.append(
-                NoiseSourceSpec(
-                    id=f"q{q}_legacy_Tphi",
-                    kind="markovian",
-                    targets=[f"q{q}"],
-                    operator="sigma_z_over_2",
-                    rate={"gamma_phi_Hz": gphi},
-                    metadata={"source": "legacy_local_rate", "Tphi_s_convention": "physical_off_diagonal_coherence_time"},
-                )
-            )
-        if gup > 0:
-            collapse_ops.append(CollapseChannelSpec(target=q, kind="excitation", rate_Hz=gup, rate_rad_s=TWO_PI * gup))
-            legacy_sources.append(
-                NoiseSourceSpec(
-                    id=f"q{q}_legacy_Tup",
-                    kind="markovian",
-                    targets=[f"q{q}"],
-                    operator="raising",
-                    rate={"gamma_up_Hz": gup},
-                    metadata={"source": "legacy_local_rate"},
-                )
-            )
+        g1 = 0.0
+        gphi = 0.0
+        gup = 0.0
+        for channel in collapse_ops:
+            if int(channel.target) != q:
+                continue
+            kind = str(channel.kind or "").strip().lower()
+            rate_Hz = max(0.0, float(channel.rate_Hz))
+            if kind == "relaxation":
+                g1 += rate_Hz
+            elif kind == "dephasing":
+                gphi += rate_Hz
+            elif kind == "excitation":
+                gup += rate_Hz
         per_qubit_rates.append(
             PerQubitRateSpec(
                 q=q,
@@ -332,67 +272,6 @@ def lower_noise(
                 gamma_up_rad_s=TWO_PI * gup,
             )
         )
-
-    of_amp = expand_value(_stochastic_value(noise, "one_over_f_amp_Hz", 0.0), num_qubits, 0.0)
-    of_fmin = expand_value(_stochastic_value(noise, "one_over_f_fmin_Hz", 1e-3), num_qubits, 1e-3)
-    of_fmax = expand_value(_stochastic_value(noise, "one_over_f_fmax_Hz", 0.5 / max(dt_s, 1e-12)), num_qubits, 0.5 / max(dt_s, 1e-12))
-    of_exp = expand_value(_stochastic_value(noise, "one_over_f_exponent", 1.0), num_qubits, 1.0)
-    ou_sigma = expand_value(_stochastic_value(noise, "ou_sigma_Hz", 0.0), num_qubits, 0.0)
-    ou_tau = expand_value(_stochastic_value(noise, "ou_tau_s", 1.0), num_qubits, 1.0)
-    stochastic_noise = [
-        StochasticChannelSpec(
-            q=q,
-            one_over_f_amp_Hz=float(of_amp[q]),
-            one_over_f_amp_rad_s=TWO_PI * float(of_amp[q]),
-            one_over_f_fmin=float(of_fmin[q]),
-            one_over_f_fmax=float(of_fmax[q]),
-            one_over_f_exponent=float(of_exp[q]),
-            ou_sigma_Hz=float(ou_sigma[q]),
-            ou_sigma_rad_s=TWO_PI * float(ou_sigma[q]),
-            ou_tau=max(1e-9, float(ou_tau[q])),
-        )
-        for q in range(num_qubits)
-    ]
-    selected_model = _noise_model(noise)
-    if selected_model in {"one_over_f", "1/f", "pink"}:
-        for q, amp_Hz in enumerate(of_amp):
-            if float(amp_Hz) <= 0.0:
-                continue
-            legacy_sources.append(
-                NoiseSourceSpec(
-                    id=f"q{q}_legacy_1overf",
-                    kind="one_over_f",
-                    targets=[f"q{q}"],
-                    operator="sigma_z_over_2",
-                    amplitude={"rms_Hz": float(amp_Hz), "definition": "integrated_rms_over_band"},
-                    band_Hz=[float(of_fmin[q]), float(of_fmax[q])],
-                    exponent=float(of_exp[q]),
-                    psd_convention="one_sided",
-                    metadata={"source": "legacy_stochastic_channel"},
-                )
-            )
-    elif selected_model == "ou":
-        for q, sigma_Hz in enumerate(ou_sigma):
-            if float(sigma_Hz) <= 0.0:
-                continue
-            legacy_sources.append(
-                NoiseSourceSpec(
-                    id=f"q{q}_legacy_ou",
-                    kind="ou",
-                    targets=[f"q{q}"],
-                    operator="sigma_z_over_2",
-                    amplitude={"sigma_Hz": float(sigma_Hz), "tau_s": float(ou_tau[q])},
-                    metadata={"source": "legacy_stochastic_channel"},
-                )
-            )
-
-    _append_source_realizations(
-        sources=authored_sources,
-        component_index=component_index,
-        num_qubits=num_qubits,
-        collapse_ops=collapse_ops,
-        stochastic_noise=stochastic_noise,
-    )
     stochastic_kinds = {str(item.kind or "").lower() for item in stochastic_noise if str(item.kind or "").strip()}
     if selected_model not in {"one_over_f", "ou"} and stochastic_kinds:
         selected_model = sorted(stochastic_kinds)[0] if len(stochastic_kinds) == 1 else "source_ir"
@@ -412,7 +291,7 @@ def lower_noise(
     return NoiseSpec(
         selected_model=selected_model,
         readout_error=float(noise.get("readout_error", 0.0) or 0.0),
-        sources=[*authored_sources, *legacy_sources],
+        sources=authored_sources,
         realizations=realizations,
         control_crosstalk=control_crosstalk,
         readout_crosstalk=readout_crosstalk,

@@ -2,22 +2,14 @@
 
 from typing import Any
 from musiq.common.schemas import ModelSpec, Trajectory
+from musiq.analysis.common.state_utils import quantum_state_series
 from musiq.schemas.results import MetricSeries
 from musiq.analysis.common.metrics_utils import _basis_labels, _complex_scalar, _label_excitation_value
 
 def _population_series_from_quantum_state(trajectory: Trajectory, model_spec: ModelSpec) -> dict[str, list[float]]:
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
-    if density_matrix:
-        qstate = density_matrix
-    elif wave_function:
-        qstate = wave_function
-    else:
-        return {}
-    snapshots = list(qstate.get("snapshots", []) or [])
+    actual_kind, snapshots = quantum_state_series(trajectory)
     if not snapshots:
         return {}
-    actual_kind = str(qstate.get("actual_kind", "")).strip().lower()
     num_qubits = int(model_spec.system.num_qubits or 0)
     levels = (
         int(model_spec.system.transmon_levels or 2)

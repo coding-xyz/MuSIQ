@@ -5,14 +5,19 @@ trajectory:
   save_final_state: true
   save_jump_events: false
   save_measurement_records: false
-case_metrics:
-  - population
-  - leakage
-  - coherence_01
-sweep_metrics:
-  - final_P0
-  - final_P1
-  - final_P2
-  - final_fidelity
-  - final_leakage
-  - final_coherence_01
+analysis:
+  - name: state_analysis
+    level: CASE
+    metrics:
+      - population
+      - leakage
+      - coherence_01
+  - name: rabi_sweep_analysis
+    level: PARAMETRIC
+    metrics:
+      - final_P0
+      - final_P1
+      - final_P2
+      - final_fidelity
+      - final_leakage
+      - final_coherence_01

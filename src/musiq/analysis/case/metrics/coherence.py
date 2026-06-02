@@ -2,16 +2,15 @@
 
 from typing import Any
 from musiq.common.schemas import ModelSpec, Trajectory
+from musiq.analysis.common.state_utils import quantum_state_series
 from musiq.schemas.results import MetricSeries
 from musiq.analysis.common.metrics_utils import _basis_labels, _complex_scalar
 
 def _coherence_series(trajectory: Trajectory, model_spec: ModelSpec, state_a: str = "0", state_b: str = "1") -> dict[str, list[float]]:
     """Extract the magnitude of the coherence between two states as a time series."""
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    if not density_matrix:
+    actual_kind, snapshots = quantum_state_series(trajectory)
+    if actual_kind != "density_matrix":
         return {}
-    
-    snapshots = list(density_matrix.get("snapshots", []) or [])
     if not snapshots:
         return {}
 

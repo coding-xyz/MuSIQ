@@ -6,13 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from musiq.backend.config import normalize_device_config
+from musiq.backend.config import normalize_device_config, normalize_noise_config
 from musiq.backend.model.lowering import lower_couplings
 from musiq.schemas.connections import SystemConnectionSpec
 from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.ui.cli import build_parser
 from musiq.workflow import CircuitConfig, ProfileConfig, create_model, load_model
-from musiq.workflow.contracts import filter_composite_device_for_step
+from musiq.workflow.contracts import filter_composite_device_for_step, normalize_device_payload
 from musiq.workflow.task_io import (
     load_analyser_config_file,
     load_circuit_config_file,
@@ -86,12 +86,27 @@ def _write_basic_solver_device_pulse_and_analyser(tmp_path: Path) -> tuple[Path,
     }
     device_cfg = {
         "template": "transmon_default",
-        "device": {"simulation_level": "qubit", "qubits": [{"freq_Hz": 5.0e9, "anharmonicity_Hz": -2.0e8}]},
-        "noise": {"model": "markovian_lindblad", "T1_s": 1e-5, "T2_s": 8e-6},
+        "device": {
+            "simulation_level": "qubit",
+            "components": [
+                {
+                    "id": "q0",
+                    "type": "transmon",
+                    "parameters": {"freq_Hz": 5.0e9, "anharmonicity_Hz": -2.0e8},
+                }
+            ],
+        },
+        "noise": {"model": "markovian_lindblad"},
     }
     analyser_cfg = {
         "trajectory": {"quantum": "", "save_times": "all", "save_final_state": True},
-        "metrics": ["population", "mean_excited", "variance"],
+        "analysis": [
+            {
+                "name": "single_qubit_analysis",
+                "level": "CASE",
+                "metrics": ["population", "mean_excited", "variance"],
+            }
+        ],
     }
     solver_path = tmp_path / "solver.json"
     device_path = tmp_path / "device.json"
@@ -137,58 +152,29 @@ def test_circuit_config_requires_exactly_one_qasm_source(tmp_path: Path):
         load_circuit_config_file(none_path)
 
 
-def test_load_circuit_config_file_reads_schedule_yaml(tmp_path: Path):
+def test_load_circuit_config_file_rejects_legacy_schedule_payload(tmp_path: Path):
     cfg = {
         "schema_version": "1.0",
         "format": "circuit_layer_yaml",
-        "num_qubits": 3,
-        "num_clbits": 0,
-        "schedule": {
-            "0": [
-                [["rz", [0], 0.7853981633974474], ["sx", [0]], ["rz", [0], 1.5707963267948968]],
-                [],
-                [],
-            ],
-            "1": [
-                [],
-                [["cz", [2, 1]]],
-                [["cz", [2, 1]]],
-            ],
-        },
+        "num_qubits": 2,
+        "schedule": {"0": [[["sx", [0]]], []]},
     }
     cfg_path = tmp_path / "circuit_schedule.yaml"
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
 
-    circuit = load_circuit_config_file(cfg_path)
-
-    assert circuit.qasm_text is None
-    assert circuit.circuit_ir is not None
-    assert circuit.circuit_ir.schedule[0][0][1].name == "sx"
-    assert circuit.circuit_ir.schedule[1][1][0].qubits == [2, 1]
-    assert circuit.circuit_ir.schedule[1][2][0].name == "cz"
+    with pytest.raises(ValueError, match="Unsupported keys in circuit top-level"):
+        load_circuit_config_file(cfg_path)
 
 
-def test_circuit_config_helper_reads_pure_schedule_yaml(tmp_path: Path):
-    schedule_only = {
-        "0": [
-            [["sx", [0]]],
-            [],
-        ],
-        "1": [
-            [["cz", [0, 1]]],
-            [["cz", [0, 1]]],
-        ],
-    }
-    cfg_path = tmp_path / "schedule_only.yaml"
-    cfg_path.write_text(json.dumps(schedule_only, ensure_ascii=False), encoding="utf-8")
+def test_load_circuit_config_file_rejects_legacy_nested_circuit_payload(tmp_path: Path):
+    cfg_path = tmp_path / "circuit_nested.yaml"
+    cfg_path.write_text(
+        json.dumps({"schema_version": "3.0", "circuit": {"qasm_text": "OPENQASM 3; qubit[1] q;"}}),
+        encoding="utf-8",
+    )
 
-    circuit = CircuitConfig.from_schedule_file(cfg_path)
-
-    assert circuit.qasm_text is None
-    assert circuit.circuit_ir is not None
-    assert circuit.circuit_ir.num_qubits == 2
-    assert circuit.circuit_ir.schedule[0][0][0].name == "sx"
-    assert circuit.circuit_ir.schedule[1][1][0].qubits == [0, 1]
+    with pytest.raises(ValueError, match="Unsupported keys in circuit top-level"):
+        load_circuit_config_file(cfg_path)
 
 
 def test_load_pulse_config_file_reads_typed_schema(tmp_path: Path):
@@ -265,6 +251,28 @@ def test_report_pulse_files_use_typed_schema_and_load():
         assert pulse_cfg.get("channel_overrides", {}) == {} or isinstance(pulse_cfg.get("channel_overrides"), dict)
 
 
+def test_task8_dynamical_decoupling_resources_use_current_schema_and_load():
+    base = Path("report/task8_dynamical_decoupling")
+    pulse_cfg = load_pulse_config_file(base / "pulses.yaml")
+    assert "x" in pulse_cfg["gates"]
+    assert pulse_cfg["gates"]["wait_6180"]["recipe_type"] == "id"
+
+    solver_cfg = load_solver_config_file(base / "solver.yaml")
+    assert solver_cfg.run.engine == "qutip"
+    assert solver_cfg.run.mcwf_ntraj == 10
+
+    device_cfg = load_device_config_file(base / "device.yaml")
+    assert device_cfg.device["components"][0]["id"] == "q0"
+
+    analyser_cfg = load_analyser_config_file(base / "analyser.yaml")
+    assert analyser_cfg.analysis[0]["metrics"] == ["population", "coherence_01"]
+
+    for circuit_name in ("fid", "hahn", "cpmg", "xy4", "xy8", "udd"):
+        circuit_cfg = load_circuit_config_file(base / "circuits" / f"{circuit_name}.yaml")
+        assert "OPENQASM 3" in str(circuit_cfg.qasm_text)
+        assert "qubit[1] q;" in str(circuit_cfg.qasm_text)
+
+
 def test_template_and_example_pulse_files_use_typed_schema_and_load():
     pulse_paths = [
         Path("templates/pulses/single_qubit.yaml"),
@@ -314,7 +322,7 @@ def test_solver_config_loads_frame_options(tmp_path: Path):
 def test_device_config_loads_with_template(tmp_path: Path):
     p = tmp_path / "device.yaml"
     p.write_text(
-        "template: transmon_default\ndevice:\n  simulation_level: qubit\nnoise:\n  model: markovian_lindblad\n  T1_s: 1.0e-5\n",
+        "template: transmon_default\ndevice:\n  simulation_level: qubit\nnoise:\n  model: markovian_lindblad\n  sources:\n    - id: q0_T1\n      kind: markovian\n      targets: [q0]\n      operator: lowering\n      parameters:\n        T1_s: 1.0e-5\n",
         encoding="utf-8",
     )
     cfg = load_device_config_file(p)
@@ -371,12 +379,20 @@ def test_filter_composite_device_for_step_keeps_only_explicit_active_components(
 def test_analyser_config_loads_metrics_and_trajectory(tmp_path: Path):
     p = tmp_path / "analyser.yaml"
     p.write_text(
-        "trajectory:\n  quantum: density_matrix\n  save_times: all\nmetrics:\n  - population\n  - mean_excited\n",
+        "trajectory:\n  quantum: density_matrix\n  save_times: all\nanalysis:\n  - name: single_qubit_analysis\n    level: CASE\n    metrics:\n      - population\n      - mean_excited\n",
         encoding="utf-8",
     )
     analyser = load_analyser_config_file(p)
     assert analyser.trajectory.extras["quantum"] == "density_matrix"
-    assert analyser.metrics == ["population", "mean_excited"]
+    assert analyser.analysis[0]["metrics"] == ["population", "mean_excited"]
+
+
+def test_analyser_config_rejects_legacy_metric_keys(tmp_path: Path):
+    p = tmp_path / "analyser.yaml"
+    p.write_text("metrics:\n  - population\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported keys in analyser top-level"):
+        load_analyser_config_file(p)
 
 
 def test_sweep_config_accepts_numpy_array_shorthand():
@@ -441,16 +457,14 @@ def test_create_model_accepts_direct_resource_configs(tmp_path: Path):
     assert "analyser_0" in model.config.analysers
     assert sorted(model.config.profiles.keys()) == ["default"]
     assert model.config.profiles["default"].solver_id == "solver_0"
-    assert "solver_0" in model.runs
+    assert len(model.runs) == 1
 
 
-def test_create_model_accepts_circuit_config_from_schedule_helper(tmp_path: Path):
+def test_create_model_accepts_direct_circuit_config_object(tmp_path: Path):
     solver_path, device_path, pulse_path, analyser_path = _write_basic_solver_device_pulse_and_analyser(tmp_path)
-    schedule_path = tmp_path / "schedule_only.yaml"
-    schedule_path.write_text(json.dumps({"0": [[["x", [0]]]]}, ensure_ascii=False), encoding="utf-8")
 
     model = create_model(
-        circuits=CircuitConfig.from_schedule_file(schedule_path),
+        circuits=CircuitConfig(qasm_text="OPENQASM 3; qubit[1] q; x q[0];"),
         solvers=solver_path,
         devices=device_path,
         pulses=pulse_path,
@@ -459,9 +473,8 @@ def test_create_model_accepts_circuit_config_from_schedule_helper(tmp_path: Path
     model.run()
 
     assert "default" in model.config.circuits
-    assert model.config.circuits["default"].circuit_ir is not None
-    assert model.config.circuits["default"].circuit_ir.schedule[0][0][0].name == "x"
-    assert "solver_0" in model.runs
+    assert model.config.circuits["default"].qasm_text == "OPENQASM 3; qubit[1] q; x q[0];"
+    assert len(model.runs) == 1
 
 
 def test_create_model_accepts_named_resource_dicts_and_builds_profiles(tmp_path: Path):
@@ -522,6 +535,38 @@ def test_zz_connection_uses_new_effective_and_residual_fields():
     assert static_couplings[0].coefficient_Hz == pytest.approx(1.2e5)
     assert conn_spec.to_device_dict()["parameters"]["max_effective_coupling_Hz"] == pytest.approx(18.0e6)
     assert conn_spec.to_device_dict()["noise"]["residual_zz_Hz"] == pytest.approx(1.2e5)
+
+
+def test_normalize_noise_config_rejects_legacy_top_level_relaxation_keys():
+    with pytest.raises(ValueError, match="Unsupported keys in noise"):
+        normalize_noise_config({"model": "markovian_lindblad", "T1_s": 1.0e-5})
+
+
+def test_normalize_device_payload_no_longer_flattens_qubit_noise_fields():
+    normalized = normalize_device_payload(
+        {
+            "qubits": [
+                {"freq_Hz": 5.0e9, "anharmonicity_Hz": -2.0e8, "T1_s": 1.0e-5, "Tphi_s": 8.0e-6},
+                {"freq_Hz": 5.1e9, "anharmonicity_Hz": -2.1e8, "T1_s": 2.0e-5, "Tphi_s": 9.0e-6},
+            ]
+        }
+    )
+
+    assert normalized["qubit_freqs_Hz"] == [5.0e9, 5.1e9]
+    assert normalized["anharmonicity_Hz"] == [-2.0e8, -2.1e8]
+    assert "T1_s" not in normalized
+    assert "Tphi_s" not in normalized
+
+
+def test_normalize_device_config_rejects_legacy_qubit_noise_fields():
+    with pytest.raises(ValueError, match="Unsupported keys in device.qubits"):
+        normalize_device_config(
+            {
+                "qubits": [
+                    {"freq_Hz": 5.0e9, "anharmonicity_Hz": -2.0e8, "T1_s": 1.0e-5},
+                ]
+            }
+        )
 
 
 def test_save_and_load_model_round_trips_profiles_and_resource_pools(tmp_path: Path):

@@ -395,25 +395,24 @@ def save_model(model: Any, path: str | Path | None = None) -> Path:
     # 2. Runs Layer
     runs_dir = out / 'runs'
     runs_dir.mkdir(parents=True, exist_ok=True)
-    for solver_id, studies in model.runs.items():
-        for run_id, run_obj in studies.items():
-            run_root = runs_dir / run_id
-            run_root.mkdir(parents=True, exist_ok=True)
-            
-            # Identity & Task
-            write_json(run_root / 'identity.json', public_value(run_obj.identity))
-            write_json(run_root / 'runtime_task.json', public_value(run_obj.runtime_task))
-            
-            # Artifacts
-            art_dir = run_root / 'artifacts'
-            art_dir.mkdir(parents=True, exist_ok=True)
-            arts = run_obj.artifacts
-            if arts.compile_report: write_json(art_dir / 'compile_report.json', public_value(arts.compile_report))
-            if arts.pulse_ir: write_json(art_dir / 'pulse_ir.json', public_value(arts.pulse_ir))
-            if arts.executable_model: write_json(art_dir / 'executable_model.json', public_value(arts.executable_model))
-            # model_spec is removed to avoid redundant duplication per run
-            if arts.decoder_outputs: write_json(art_dir / 'decoder_outputs.json', public_value(arts.decoder_outputs))
-            write_json(art_dir / 'timings.json', public_value(arts.timings))
+    for run_id, run_obj in model.runs.items():
+        run_root = runs_dir / run_id
+        run_root.mkdir(parents=True, exist_ok=True)
+
+        # Identity & Task
+        write_json(run_root / 'identity.json', public_value(run_obj.identity))
+        write_json(run_root / 'runtime_task.json', public_value(run_obj.runtime_task))
+
+        # Artifacts
+        art_dir = run_root / 'artifacts'
+        art_dir.mkdir(parents=True, exist_ok=True)
+        arts = run_obj.artifacts
+        if arts.compile_report: write_json(art_dir / 'compile_report.json', public_value(arts.compile_report))
+        if arts.pulse_ir: write_json(art_dir / 'pulse_ir.json', public_value(arts.pulse_ir))
+        if arts.executable_model: write_json(art_dir / 'executable_model.json', public_value(arts.executable_model))
+        # model_spec is removed to avoid redundant duplication per run
+        if arts.decoder_outputs: write_json(art_dir / 'decoder_outputs.json', public_value(arts.decoder_outputs))
+        write_json(art_dir / 'timings.json', public_value(arts.timings))
 
         # Results
         results_dir = run_root / 'results'
@@ -527,11 +526,15 @@ def load_model(model_class: Any, create_model_func: Any, path: str | Path) -> An
             if results_dir.exists():
                 for result_root in sorted([p for p in results_dir.iterdir() if p.is_dir()]):
                     result_payload = read_json(result_root / 'result.json')
-                    trajectories: dict[str, Any] = {}
+                    trajectories: dict[int, Any] = {}
                     traj_dir = result_root / 'trajectories'
                     if traj_dir.exists():
                         for traj_path in sorted(traj_dir.glob('*.h5')):
-                            trajectories[traj_path.stem] = load_trajectory_h5(traj_path)
+                            try:
+                                shot_id = int(traj_path.stem)
+                            except ValueError:
+                                shot_id = traj_path.stem
+                            trajectories[shot_id] = load_trajectory_h5(traj_path)
                     params_payload = dict(result_payload.get('parameters', {}) or {})
                     run_result = RunResult(
                         result_id=str(result_payload.get('result_id', result_root.name)),
@@ -546,10 +549,7 @@ def load_model(model_class: Any, create_model_func: Any, path: str | Path) -> An
                     )
                     results[str(run_result.parameters.parameter_id)] = run_result
             
-            solver_id = identity.solver_id
-            if solver_id not in model.runs:
-                model.runs[solver_id] = {}
-            model.runs[solver_id][run_id] = ModelRun(
+            model.runs[run_id] = ModelRun(
                 identity=identity,
                 runtime_task=runtime_task,
                 artifacts=artifacts,

@@ -3,26 +3,26 @@ solver:
   engine: qoptics
   study:
     - name: control_dynamics
+      description: default single-qubit control study
       active_components: [q0]
       active_connections: []
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
       solver_mode: me
       time:
         dt_s: 1.0e-9
-        t_end_s: 50.0e-6
-        t_padding_s: 0.0
+        t_padding_s: 20.0e-9
       frame:
         mode: rotating
         reference: carrier
         rwa: true
       options: {}
-  analysis:
-    trace:
-      quantum: density_matrix
-      save_times: all
-      save_final_state: true
-      save_jump_events: false
-      save_measurement_records: false
-    metrics:
-      - population
   schedule:
     policy: serial

@@ -15,9 +15,8 @@ from musiq.workflow.model import Model, create_model
 
 
 def _iter_model_runs(model: Model):
-    for solver_runs in model.runs.values():
-        for run_id, run_obj in solver_runs.items():
-            yield run_id, run_obj
+    for run_id, run_obj in model.runs.items():
+        yield run_id, run_obj
 
 
 def plot_default(model: Model) -> dict[str, object]:
@@ -252,8 +251,10 @@ def run_pulse_sweep(
 def density_snapshots(source: Any) -> np.ndarray:
     """Return density-matrix snapshots from a musiq case or trajectory."""
     trajectory = source.get("trajectory") if isinstance(source, dict) else source
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    return np.asarray(density_matrix.get("snapshots", []) or [], dtype=complex)
+    density_matrix = getattr(trajectory, "density_matrix", None)
+    if isinstance(density_matrix, dict):
+        return np.asarray(density_matrix.get("snapshots", []) or [], dtype=complex)
+    return np.asarray(density_matrix or [], dtype=complex)
 
 
 def _case_model_spec(case: dict[str, Any]):

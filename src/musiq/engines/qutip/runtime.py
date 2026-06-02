@@ -111,6 +111,8 @@ class QutipSolverInputs:
     c_ops: list[Any]
     selected_noise: str
     seed: int
+    stochastic_channels: list[Any] = field(default_factory=list)
+    runtime_metadata: dict[str, Any] = field(default_factory=dict)
 
     def inspect(self) -> dict[str, Any]:
         """Return a serializable summary of collapse/noise inputs."""
@@ -118,6 +120,8 @@ class QutipSolverInputs:
             "num_collapse_ops": len(self.c_ops),
             "selected_noise": self.selected_noise,
             "seed": self.seed,
+            "num_stochastic_channels": len(self.stochastic_channels),
+            "runtime_metadata": dict(self.runtime_metadata or {}),
         }
 
 

@@ -50,6 +50,10 @@ class RunIdentity:
     """
     run_id: str
     solver_id: str
+    circuit_id: str | None = None
+    device_id: str | None = None
+    pulse_id: str | None = None
+    profile_id: str | None = None
     study_name: str | None = None
     study_index: int | None = None
 

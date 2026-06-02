@@ -41,7 +41,7 @@ def test_solver_config_to_backend_config_normalizes_noise_and_runtime_fields():
 def test_analyser_config_to_payload_merges_typed_sections_and_extras():
     analyser = AnalyserConfig(
         solver_id="solver_0",
-        metrics=["population"],
+        analysis=[{"name": "single_qubit_analysis", "level": "CASE", "metrics": ["population"]}],
         extras={"custom_flag": True},
     )
     analyser.trajectory.extras["window"] = "tail"
@@ -50,7 +50,7 @@ def test_analyser_config_to_payload_merges_typed_sections_and_extras():
     payload = analyser.to_payload()
 
     assert payload["solver_id"] == "solver_0"
-    assert payload["metrics"] == ["population"]
+    assert payload["analysis"] == [{"name": "single_qubit_analysis", "level": "CASE", "metrics": ["population"]}]
     assert payload["trajectory"]["window"] == "tail"
     assert payload["report"]["format"] == "html"
     assert payload["custom_flag"] is True

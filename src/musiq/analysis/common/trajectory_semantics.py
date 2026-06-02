@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from musiq.common.schemas import Trajectory
+from musiq.analysis.common.state_utils import quantum_state_series
 
 
 def _complex_scalar(value) -> complex:
@@ -30,11 +31,7 @@ def state_rows(trajectory: Trajectory) -> list[list[float]]:
     """Return the primary classical state-like trajectory rows."""
     _key, payload = _state_payload(trajectory)
     if not payload:
-        density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-        wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
-        qstate = density_matrix or wave_function
-        actual_kind = str(qstate.get("actual_kind", "")).strip().lower()
-        snapshots = list(qstate.get("snapshots", []) or [])
+        actual_kind, snapshots = quantum_state_series(trajectory)
         rows: list[list[float]] = []
         for snapshot in snapshots:
             if actual_kind == "density_matrix":

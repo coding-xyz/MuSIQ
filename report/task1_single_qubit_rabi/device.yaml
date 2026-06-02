@@ -10,8 +10,16 @@ device:
         freq_Hz: 5.0e9
         anharmonicity_Hz: -2.0e8
       noise:
-        T1_s: 20.0e-6
-        T2_s: 12.0e-6
+        - id: q0_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 20.0e-6
+        - id: q0_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 17.142857142857e-6
   connections: []
   simulation_level: nlevel
   control_scale: 1.0

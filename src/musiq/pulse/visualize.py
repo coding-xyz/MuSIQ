@@ -1479,13 +1479,17 @@ def load_trajectory_h5(path: str | Path) -> Trajectory:
             if isinstance(raw, bytes):
                 raw = raw.decode("utf-8")
             if raw:
-                wave_function = dict(json_restore(json.loads(str(raw)))) or None
+                restored = json_restore(json.loads(str(raw)))
+                wave_function = dict(restored) if isinstance(restored, dict) else restored
+                wave_function = wave_function or None
         if "density_matrix_json" in h5:
             raw = h5["density_matrix_json"][()]
             if isinstance(raw, bytes):
                 raw = raw.decode("utf-8")
             if raw:
-                density_matrix = dict(json_restore(json.loads(str(raw)))) or None
+                restored = json_restore(json.loads(str(raw)))
+                density_matrix = dict(restored) if isinstance(restored, dict) else restored
+                density_matrix = density_matrix or None
         if "classical_json" in h5:
             raw = h5["classical_json"][()]
             if isinstance(raw, bytes):

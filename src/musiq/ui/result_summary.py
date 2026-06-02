@@ -12,9 +12,8 @@ from musiq.workflow.model import Model
 
 
 def _first_model_run(model: Model):
-    for solver_runs in model.runs.values():
-        for run_id, run_obj in solver_runs.items():
-            return run_id, run_obj
+    for run_id, run_obj in model.runs.items():
+        return run_id, run_obj
     raise ValueError("summarize_workflow_result expects a model that has already produced results.")
 
 
@@ -84,8 +83,8 @@ def summarize_workflow_result(
     model_spec = bundle.artifacts.model_spec if bundle.artifacts else None
 
     inferred_state_encoding = state_encoding(trajectory)
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
+    density_matrix = getattr(trajectory, "density_matrix", None)
+    wave_function = getattr(trajectory, "wave_function", None)
     if density_matrix:
         state_kind = "density_matrix"
     elif wave_function:

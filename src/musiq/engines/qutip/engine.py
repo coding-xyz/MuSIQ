@@ -100,14 +100,11 @@ class QuTiPEngine(
         rate = max(0.0, float(rate))
         if rate <= 0.0:
             return 0.0
-        if str(model_type).lower() == "qubit_network":
-            # With c = sqrt(gamma_phi/2) * sigma_z, off-diagonal qubit coherence
-            # decays at gamma_phi. Using sqrt(gamma_phi) would overcount by 2x.
-            return math.sqrt(0.5 * rate)
-        # For n = a^\dagger a, D[n] damps |0><1| coherence at rate prefactor^2 / 2.
-        # Use sqrt(2 * gamma_phi) so Tphi continues to mean the pure-dephasing time
-        # of the qubit subspace across nlevel/cqed models as well.
-        return math.sqrt(2.0 * rate)
+        # With c = sqrt(gamma_phi/2) * A and an eigenvalue gap of 2 between |0> and |1>,
+        # the |0><1| coherence decays at gamma_phi. For qubits A = sigma_z; for nlevel
+        # transmons/cqed we choose A = I - 2n so the computational subspace matches
+        # the same [1, -1] convention.
+        return math.sqrt(0.5 * rate)
 
     @staticmethod
     def _one_over_f_trace(

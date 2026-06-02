@@ -13,12 +13,12 @@ device:
         - id: q0_T1
           kind: markovian
           operator: lowering
-          rate:
+          parameters:
             T1_s: 200.0e-6
         - id: q0_Tphi
           kind: markovian
           operator: sigma_z_over_2
-          rate:
+          parameters:
             Tphi_s: 80.0e-6
         - id: q0_flux_1overf
           kind: one_over_f

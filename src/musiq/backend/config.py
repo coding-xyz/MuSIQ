@@ -25,17 +25,10 @@ _ALLOWED_SOLVER = {"se", "me", "mcwf", "heom", "io"}
 
 @dataclass(frozen=True)
 class QubitConfig:
-    """Normalized per-qubit hardware and local-noise values."""
+    """Normalized per-qubit hardware values."""
 
     freq_Hz: float = 0.0
     anharmonicity_Hz: float = -0.2
-    T1_s: float | None = None
-    T2_s: float | None = None
-    Tphi_s: float | None = None
-    Tup_s: float | None = None
-    gamma1_Hz: float | None = None
-    gamma_phi_Hz: float | None = None
-    gamma_up_Hz: float | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     def value(self, key: str, default: float = 0.0) -> float:
@@ -46,10 +39,6 @@ class QubitConfig:
         data = dict(self.raw)
         data.setdefault("freq_Hz", self.freq_Hz)
         data.setdefault("anharmonicity_Hz", self.anharmonicity_Hz)
-        for key in ("T1_s", "T2_s", "Tphi_s", "Tup_s", "gamma1_Hz", "gamma_phi_Hz", "gamma_up_Hz"):
-            value = getattr(self, key)
-            if value is not None:
-                data[key] = value
         return data
 
 
@@ -156,13 +145,6 @@ class DeviceConfig:
     dimension: int | None = None
     anharmonicity_Hz: list[float] | float | None = None
     g_cavity_Hz: list[float] | float | None = None
-    gamma1_Hz: Any = None
-    gamma_phi_Hz: Any = None
-    gamma_up_Hz: Any = None
-    T1_s: Any = None
-    T2_s: Any = None
-    Tphi_s: Any = None
-    Tup_s: Any = None
     shared_noise: list[dict[str, Any]] = field(default_factory=list)
     control_crosstalk: list[dict[str, Any]] = field(default_factory=list)
     readout_crosstalk: list[dict[str, Any]] = field(default_factory=list)
@@ -207,13 +189,6 @@ class DeviceConfig:
             "dimension",
             "anharmonicity_Hz",
             "g_cavity_Hz",
-            "gamma1_Hz",
-            "gamma_phi_Hz",
-            "gamma_up_Hz",
-            "T1_s",
-            "T2_s",
-            "Tphi_s",
-            "Tup_s",
         ):
             value = getattr(self, key)
             if value is not None:
@@ -228,38 +203,11 @@ class DeviceConfig:
 
 
 @dataclass(frozen=True)
-class LocalNoiseConfig:
-    """Normalized local noise values before expansion to qubits."""
-
-    gamma1_Hz: Any = None
-    gamma_phi_Hz: Any = None
-    gamma_up_Hz: Any = None
-    T1_s: Any = None
-    T2_s: Any = None
-    Tphi_s: Any = None
-    Tup_s: Any = None
-
-
-@dataclass(frozen=True)
-class StochasticNoiseConfig:
-    """Normalized stochastic dephasing noise values."""
-
-    one_over_f_amp_Hz: Any = 0.0
-    one_over_f_fmin_Hz: Any = 1e-3
-    one_over_f_fmax_Hz: Any = None
-    one_over_f_exponent: Any = 1.0
-    ou_sigma_Hz: Any = 0.0
-    ou_tau_s: Any = 1.0
-
-
-@dataclass(frozen=True)
 class NoiseConfig:
     """Normalized noise configuration consumed by model lowering."""
 
     data: dict[str, Any] = field(default_factory=dict)
     model: str = "markovian_lindblad"
-    local: LocalNoiseConfig = field(default_factory=LocalNoiseConfig)
-    stochastic: StochasticNoiseConfig = field(default_factory=StochasticNoiseConfig)
     sources: list[dict[str, Any]] = field(default_factory=list)
     enabled_sources: list[str] = field(default_factory=list)
     disabled_sources: list[str] = field(default_factory=list)
@@ -383,16 +331,10 @@ def _optional_float(value: Any) -> float | None:
 
 def _normalize_qubit(raw: dict[str, Any]) -> QubitConfig:
     data = dict(raw or {})
+    reject_unknown_keys("device.qubits[]", data, {"freq_Hz", "anharmonicity_Hz"})
     return QubitConfig(
         freq_Hz=float(data.get("freq_Hz", 0.0)),
         anharmonicity_Hz=float(data.get("anharmonicity_Hz", -0.2)),
-        T1_s=_optional_float(data.get("T1_s")),
-        T2_s=_optional_float(data.get("T2_s")),
-        Tphi_s=_optional_float(data.get("Tphi_s")),
-        Tup_s=_optional_float(data.get("Tup_s")),
-        gamma1_Hz=_optional_float(data.get("gamma1_Hz")),
-        gamma_phi_Hz=_optional_float(data.get("gamma_phi_Hz")),
-        gamma_up_Hz=_optional_float(data.get("gamma_up_Hz")),
         raw=data,
     )
 
@@ -481,13 +423,6 @@ def normalize_device_config(raw: dict[str, Any] | DeviceConfig | None) -> Device
         dimension=None if data.get("dimension") is None else int(data.get("dimension")),
         anharmonicity_Hz=data.get("anharmonicity_Hz"),
         g_cavity_Hz=data.get("g_cavity_Hz"),
-        gamma1_Hz=data.get("gamma1_Hz"),
-        gamma_phi_Hz=data.get("gamma_phi_Hz"),
-        gamma_up_Hz=data.get("gamma_up_Hz"),
-        T1_s=data.get("T1_s"),
-        T2_s=data.get("T2_s"),
-        Tphi_s=data.get("Tphi_s"),
-        Tup_s=data.get("Tup_s"),
         shared_noise=[dict(item) for item in list(data.get("shared_noise", []) or []) if isinstance(item, dict)],
         control_crosstalk=[dict(item) for item in list(data.get("control_crosstalk", []) or []) if isinstance(item, dict)],
         readout_crosstalk=[dict(item) for item in list(data.get("readout_crosstalk", []) or []) if isinstance(item, dict)],
@@ -504,28 +439,9 @@ def normalize_noise_config(raw: dict[str, Any] | list[dict[str, Any]] | NoiseCon
         data = dict(raw or {})
     reject_unknown_keys("noise", data, NOISE_KEYS)
     model = _normalize_noise_model(data.get("model", data.get("type", "")), one_over_f=bool(data.get("one_over_f", False)))
-    local = LocalNoiseConfig(
-        gamma1_Hz=data.get("gamma1_per_qubit_Hz", data.get("gamma1_Hz")),
-        gamma_phi_Hz=data.get("gamma_phi_per_qubit_Hz", data.get("gamma_phi_Hz")),
-        gamma_up_Hz=data.get("gamma_up_per_qubit_Hz", data.get("gamma_up_Hz")),
-        T1_s=data.get("T1_per_qubit_s", data.get("T1_s")),
-        T2_s=data.get("T2_per_qubit_s", data.get("T2_s")),
-        Tphi_s=data.get("Tphi_per_qubit_s", data.get("Tphi_s")),
-        Tup_s=data.get("Tup_per_qubit_s", data.get("Tup_s")),
-    )
-    stochastic = StochasticNoiseConfig(
-        one_over_f_amp_Hz=data.get("one_over_f_amp_Hz", 0.0),
-        one_over_f_fmin_Hz=data.get("one_over_f_fmin_Hz", 1e-3),
-        one_over_f_fmax_Hz=data.get("one_over_f_fmax_Hz"),
-        one_over_f_exponent=data.get("one_over_f_exponent", 1.0),
-        ou_sigma_Hz=data.get("ou_sigma_Hz", 0.0),
-        ou_tau_s=data.get("ou_tau_s", 1.0),
-    )
     return NoiseConfig(
         data={**data, "model": model},
         model=model,
-        local=local,
-        stochastic=stochastic,
         sources=[dict(item) for item in list(data.get("sources", []) or []) if isinstance(item, dict)],
         enabled_sources=[str(item) for item in list(data.get("enabled_sources", []) or [])],
         disabled_sources=[str(item) for item in list(data.get("disabled_sources", []) or [])],

@@ -29,8 +29,8 @@ def write_trajectory_h5(trajectory, out_path: Path) -> Path:
         h5.attrs["engine"] = trajectory.engine
         h5.attrs["trajectory_schema_version"] = getattr(trajectory, "schema_version", "1.0")
         metadata = dict(getattr(trajectory, "metadata", {}) or {})
-        wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
-        density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
+        wave_function = getattr(trajectory, "wave_function", None)
+        density_matrix = getattr(trajectory, "density_matrix", None)
         classical = dict(getattr(trajectory, "classical", {}) or {})
         measurements = dict(getattr(trajectory, "measurements", {}) or {})
         for key in ("num_qubits", "model_dimension"):
@@ -40,10 +40,10 @@ def write_trajectory_h5(trajectory, out_path: Path) -> Path:
         if metadata:
             metadata_json = json.dumps(_jsonable(metadata), ensure_ascii=False)
             h5.create_dataset("metadata_json", data=metadata_json, dtype=h5py.string_dtype(encoding="utf-8"))
-        if wave_function:
+        if wave_function is not None:
             wave_function_json = json.dumps(_jsonable(wave_function), ensure_ascii=False)
             h5.create_dataset("wave_function_json", data=wave_function_json, dtype=h5py.string_dtype(encoding="utf-8"))
-        if density_matrix:
+        if density_matrix is not None:
             density_matrix_json = json.dumps(_jsonable(density_matrix), ensure_ascii=False)
             h5.create_dataset("density_matrix_json", data=density_matrix_json, dtype=h5py.string_dtype(encoding="utf-8"))
         if classical:
@@ -281,7 +281,7 @@ def build_settings_report(
             "frame.reference": "Reference frequency source: pulse_carrier | explicit | none.",
             "frame.rwa": "Enable rotating-wave approximation for XY drives.",
             "frame.qubit_reference_freqs_Hz": "Explicit per-qubit reference frequencies used when frame.reference=explicit.",
-            "noise.T1_s/T2_s/Tphi_s/Tup_s or gamma*_Hz": "Converted to internal angular-rate Lindblad coefficients (rad/s).",
+            "noise.sources[].parameters": "Canonical authored noise-source parameters such as T1_s, Tphi_s, gamma1_Hz, or OU / 1/f amplitudes.",
             "noise.model": "Select noise model: markovian_lindblad | one_over_f | ou.",
         },
         "notes": [

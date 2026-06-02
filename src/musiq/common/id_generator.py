@@ -18,12 +18,7 @@ class IDGenerator:
     @staticmethod
     def next_run_id(model: "Model", tag: str | None = None) -> str:
         """Generate next available run_id."""
-        existing = set()
-        for solver_runs in dict(getattr(model, "runs", {}) or {}).values():
-            if isinstance(solver_runs, dict):
-                existing.update(str(run_id) for run_id in solver_runs.keys())
-            else:
-                existing.add(str(solver_runs))
+        existing = {str(run_id) for run_id in dict(getattr(model, "runs", {}) or {}).keys()}
         prefix = tag if tag else "run"
         
         # If a custom tag is provided and doesn't conflict, use it directly
@@ -84,12 +79,12 @@ class IDGenerator:
         return f"{base}_{idx}"
     
     @staticmethod
-    def next_shot_id(run_obj) -> str:
+    def next_shot_id(run_obj) -> int:
         """Generate next available shot_id for a result."""
         existing = set()
         for result in run_obj.results.values():
             existing.update(result.trajectories.keys())
         idx = 0
-        while f"shot_{idx}" in existing:
+        while idx in existing:
             idx += 1
-        return f"shot_{idx}"
+        return idx

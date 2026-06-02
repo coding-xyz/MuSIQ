@@ -1,0 +1,30 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  seed: 12345
+  mcwf_ntraj: 10
+  study:
+    - name: dynamical_decoupling
+      description: Compare single-qubit dynamical decoupling sequences under QuTiP MCWF evolution.
+      active_components: [q0]
+      active_connections: []
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
+      solver_mode: mcwf
+      time:
+        dt_s: 2.0e-9
+        t_padding_s: 0.0
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}
+  schedule:
+    policy: serial

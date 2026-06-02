@@ -1,6 +1,17 @@
 device: {}
 noise:
   model: markovian_lindblad
-  T1_s: 8.0e-5
-  T2_s: 6.0e-5
+  sources:
+    - id: q0_T1
+      kind: markovian
+      targets: [q0]
+      operator: lowering
+      parameters:
+        T1_s: 8.0e-5
+    - id: q0_Tphi
+      kind: markovian
+      targets: [q0]
+      operator: sigma_z_over_2
+      parameters:
+        Tphi_s: 1.0e-4
   readout_error: 0.01

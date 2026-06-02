@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 import math
 from typing import Any
 
-from musiq.schemas._factory_utils import _float, _merged_payload, _optional_float, _str
+from musiq.schemas._factory_utils import _float, _merged_payload, _str
 
 
 @dataclass
@@ -79,13 +79,6 @@ class TransmonComponentSpec(SystemComponentSpec):
         omega_rad_s: Qubit transition angular frequency in rad/s. Defaults to 0.0.
         anharmonicity_Hz: Anharmonicity in Hz. Defaults to 0.0.
         anharmonicity_rad_s: Anharmonicity in rad/s. Defaults to 0.0.
-        T1_s: Longitudinal relaxation time in seconds.
-        T2_s: Total dephasing time in seconds.
-        Tphi_s: Pure dephasing time in seconds.
-        Tup_s: Excitation time in seconds.
-        gamma1_Hz: Relaxation rate in Hz. Defaults to 0.0.
-        gamma_phi_Hz: Pure dephasing rate in Hz. Defaults to 0.0.
-        gamma_up_Hz: Excitation rate in Hz. Defaults to 0.0.
     """
 
     type: str = "transmon"
@@ -94,13 +87,6 @@ class TransmonComponentSpec(SystemComponentSpec):
     omega_rad_s: float = 0.0
     anharmonicity_Hz: float = 0.0
     anharmonicity_rad_s: float = 0.0
-    T1_s: float | None = None
-    T2_s: float | None = None
-    Tphi_s: float | None = None
-    Tup_s: float | None = None
-    gamma1_Hz: float = 0.0
-    gamma_phi_Hz: float = 0.0
-    gamma_up_Hz: float = 0.0
 
 
 @dataclass
@@ -253,7 +239,6 @@ def _build_transmon_component(raw: dict[str, Any]) -> TransmonComponentSpec:
     """
     data = _merged_payload(raw)
     basis = data["_basis"]
-    noise = data["_noise"]
     freq_hz = _float(data, "freq_Hz")
     anh_hz = _float(data, "anharmonicity_Hz")
     omega_rad_s = _float(data, "omega_rad_s") or (2.0 * math.pi * freq_hz)
@@ -265,13 +250,6 @@ def _build_transmon_component(raw: dict[str, Any]) -> TransmonComponentSpec:
         omega_rad_s=omega_rad_s,
         anharmonicity_Hz=anh_hz,
         anharmonicity_rad_s=anh_rad_s,
-        T1_s=_optional_float(data.get("T1_s", noise.get("T1_s"))),
-        T2_s=_optional_float(data.get("T2_s", noise.get("T2_s"))),
-        Tphi_s=_optional_float(data.get("Tphi_s", noise.get("Tphi_s"))),
-        Tup_s=_optional_float(data.get("Tup_s", noise.get("Tup_s"))),
-        gamma1_Hz=float(data.get("gamma1_Hz", noise.get("gamma1_Hz", 0.0)) or 0.0),
-        gamma_phi_Hz=float(data.get("gamma_phi_Hz", noise.get("gamma_phi_Hz", 0.0)) or 0.0),
-        gamma_up_Hz=float(data.get("gamma_up_Hz", noise.get("gamma_up_Hz", 0.0)) or 0.0),
     )
 
 

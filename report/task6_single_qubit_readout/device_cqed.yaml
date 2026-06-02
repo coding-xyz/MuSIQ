@@ -10,8 +10,16 @@ device:
         freq_Hz: 5.000e9
         anharmonicity_Hz: -2.20e8
       noise:
-        T1_s: 0.35e-6
-        Tphi_s: 8.0e-6
+        - id: q0_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 0.35e-6
+        - id: q0_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 8.0e-6
 
     - id: r0
       type: resonator

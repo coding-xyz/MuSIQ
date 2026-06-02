@@ -1,0 +1,6 @@
+schema_version: "1.0"
+qasm_text: |
+  OPENQASM 3;
+  qubit[1] q;
+  sx q[0];
+  sx q[0];

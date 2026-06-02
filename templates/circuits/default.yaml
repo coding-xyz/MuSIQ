@@ -1,12 +1,8 @@
-schema_version: "3.0"
-circuit:
-  name: "default_circuit"
-  description: "A basic single-qubit circuit template with parameterized rotation"
-  gates:
-    - type: "RX"
-      qubits: [0]
-      params:
-        theta: "theta"
-  # Parameter bindings provide default values for the parameterized gates
-  param_bindings:
-    theta: 3.141592653589793 # pi
+schema_version: "1.0"
+qasm_text: |
+  OPENQASM 3;
+  include "stdgates.inc";
+  qubit[1] q;
+  rx(theta) q[0];
+param_bindings:
+  theta: 3.141592653589793

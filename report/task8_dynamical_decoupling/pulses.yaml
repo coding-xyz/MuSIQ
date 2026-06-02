@@ -1,0 +1,118 @@
+schema_version: "1.0"
+pulse:
+  defaults:
+    xy_carrier_freq_Hz: 5.0e9
+    schedule_policy: serial
+    idle_duration_ns: 20.0
+  gates:
+    x:
+      recipe_type: x
+      shape: drag
+      duration_ns: 20.0
+      amplitude_Hz: 17.0e6
+      carrier_freq_Hz: 5.0e9
+      sigma_fraction: 0.2
+      drag_beta: 0.35
+    sx:
+      recipe_type: sx
+      shape: drag
+      duration_ns: 20.0
+      amplitude_Hz: 8.5e6
+      carrier_freq_Hz: 5.0e9
+      sigma_fraction: 0.2
+      drag_beta: 0.35
+    wait_980:
+      recipe_type: id
+      duration_ns: 980.0
+    wait_245:
+      recipe_type: id
+      duration_ns: 245.0
+    wait_273:
+      recipe_type: id
+      duration_ns: 273.0
+    wait_94:
+      recipe_type: id
+      duration_ns: 94.0
+    wait_115:
+      recipe_type: id
+      duration_ns: 115.0
+    wait_183:
+      recipe_type: id
+      duration_ns: 183.0
+    wait_230:
+      recipe_type: id
+      duration_ns: 230.0
+    wait_240:
+      recipe_type: id
+      duration_ns: 240.0
+    wait_312:
+      recipe_type: id
+      duration_ns: 312.0
+    wait_424:
+      recipe_type: id
+      duration_ns: 424.0
+    wait_480:
+      recipe_type: id
+      duration_ns: 480.0
+    wait_536:
+      recipe_type: id
+      duration_ns: 536.0
+    wait_593:
+      recipe_type: id
+      duration_ns: 593.0
+    wait_594:
+      recipe_type: id
+      duration_ns: 594.0
+    wait_625:
+      recipe_type: id
+      duration_ns: 625.0
+    wait_990:
+      recipe_type: id
+      duration_ns: 990.0
+    wait_710:
+      recipe_type: id
+      duration_ns: 710.0
+    wait_1105:
+      recipe_type: id
+      duration_ns: 1105.0
+    wait_1250:
+      recipe_type: id
+      duration_ns: 1250.0
+    wait_1395:
+      recipe_type: id
+      duration_ns: 1395.0
+    wait_1545:
+      recipe_type: id
+      duration_ns: 1545.0
+    wait_1980:
+      recipe_type: id
+      duration_ns: 1980.0
+    wait_2000:
+      recipe_type: id
+      duration_ns: 2000.0
+    wait_2500:
+      recipe_type: id
+      duration_ns: 2500.0
+    wait_2840:
+      recipe_type: id
+      duration_ns: 2840.0
+    wait_4420:
+      recipe_type: id
+      duration_ns: 4420.0
+    wait_5000:
+      recipe_type: id
+      duration_ns: 5000.0
+    wait_5580:
+      recipe_type: id
+      duration_ns: 5580.0
+    wait_6180:
+      recipe_type: id
+      duration_ns: 6180.0
+    wait_10000:
+      recipe_type: id
+      duration_ns: 10000.0
+    wait_20000:
+      recipe_type: id
+      duration_ns: 20000.0
+    virtual_z:
+      recipe_type: virtual_z

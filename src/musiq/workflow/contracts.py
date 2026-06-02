@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-from pathlib import Path
 from typing import Any
 
 from musiq.common.schemas import BackendConfig
@@ -136,52 +135,6 @@ class CircuitConfig:
     circuit_ir: CircuitIR | None = None
     param_bindings: dict[str, float] | None = None
 
-    @classmethod
-    def from_schedule_payload(
-        cls,
-        schedule_or_payload: dict[str, Any],
-        *,
-        num_qubits: int | None = None,
-        num_clbits: int | None = None,
-        schema_version: str = "1.0",
-        format: str = "circuit_layer_yaml",
-        param_bindings: dict[str, float] | None = None,
-    ) -> "CircuitConfig":
-        """Build a ``CircuitConfig`` from a raw schedule mapping or schedule payload."""
-        from musiq.workflow.task_io import circuit_from_schedule_payload
-
-        return circuit_from_schedule_payload(
-            schedule_or_payload,
-            num_qubits=num_qubits,
-            num_clbits=num_clbits,
-            schema_version=schema_version,
-            format=format,
-            param_bindings=param_bindings,
-        )
-
-    @classmethod
-    def from_schedule_file(
-        cls,
-        path: str | Path,
-        *,
-        num_qubits: int | None = None,
-        num_clbits: int | None = None,
-        schema_version: str = "1.0",
-        format: str = "circuit_layer_yaml",
-        param_bindings: dict[str, float] | None = None,
-    ) -> "CircuitConfig":
-        """Load a raw schedule YAML/JSON file into a ``CircuitConfig``."""
-        from musiq.workflow.task_io import load_circuit_schedule_file
-
-        return load_circuit_schedule_file(
-            path,
-            num_qubits=num_qubits,
-            num_clbits=num_clbits,
-            schema_version=schema_version,
-            format=format,
-            param_bindings=param_bindings,
-        )
-
 
 @dataclass(slots=True)
 class ProfileConfig:
@@ -282,23 +235,11 @@ class ReportConfig:
 
 @dataclass(slots=True)
 class AnalyserConfig:
-    """Default analyser config. Now supports hierarchical analysis steps."""
+    """Canonical analyser config using hierarchical analysis steps."""
 
     solver_id: str | None = None
-    # Legacy support for trajectory filtering
     trajectory: AnalyserTrajectoryConfig = field(default_factory=AnalyserTrajectoryConfig)
-    
-    # New Hierarchical Analysis Definition
-    # Each step: {name: str, level: "CASE"|"PARAMETRIC"|"COMPREHENSIVE", metrics: list[str], ...}
     analysis: list[dict[str, Any]] = field(default_factory=list)
-    
-    # Legacy metrics fields (maintained for backward compatibility during migration)
-    case_metrics: list[dict] | list[str] | None = None
-    sweep_metrics: list[str] | None = None
-    metrics: list[dict] | list[str] | None = None
-    parametric_metrics: list[str] | None = None
-    
-    # Legacy typed configs (will be migrated to analysis step extras)
     readout_model: ReadoutModelConfig = field(default_factory=ReadoutModelConfig)
     iq_discrimination: IQDiscriminationConfig = field(default_factory=IQDiscriminationConfig)
     noise_analysis: NoiseAnalysisConfig = field(default_factory=NoiseAnalysisConfig)
@@ -320,24 +261,12 @@ class AnalyserConfig:
         payload: dict[str, object] = {}
         if self.solver_id:
             payload["solver_id"] = str(self.solver_id)
-        
-        # Modern hierarchical analysis
         payload["analysis"] = list(self.analysis)
-        
-        # Legacy components
         payload["trajectory"] = _payload_dict(self.trajectory)
         payload["readout_model"] = _payload_dict(self.readout_model)
         payload["iq_discrimination"] = _payload_dict(self.iq_discrimination)
         payload["noise_analysis"] = _payload_dict(self.noise_analysis)
         payload["report"] = _payload_dict(self.report)
-        
-        # Backward compatibility for metrics
-        case_metrics = self.case_metrics if self.case_metrics is not None else self.metrics
-        sweep_metrics = self.sweep_metrics if self.sweep_metrics is not None else self.parametric_metrics
-        if case_metrics:
-            payload["case_metrics"] = list(case_metrics)
-        if sweep_metrics:
-            payload["sweep_metrics"] = list(sweep_metrics)
         if self.extras:
             payload.update(dict(self.extras))
         return payload
@@ -632,16 +561,11 @@ def _normalize_composite_device_payload(raw: dict[str, object]) -> dict[str, obj
         comp_type = str(comp.get("type", "")).strip().lower()
         basis = dict(comp.get("basis", {}) or {})
         parameters = dict(comp.get("parameters", {}) or {})
-        raw_noise = comp.get("noise", {}) or {}
-        local_noise = dict(raw_noise) if isinstance(raw_noise, dict) else {}
         if comp_type == "transmon":
             q_payload = {
                 "freq_Hz": float(parameters.get("freq_Hz", 0.0)),
                 "anharmonicity_Hz": float(parameters.get("anharmonicity_Hz", -2.0e8)),
             }
-            for key in ("T1_s", "T2_s", "Tphi_s", "Tup_s", "gamma1_Hz", "gamma_phi_Hz", "gamma_up_Hz"):
-                if key in local_noise:
-                    q_payload[key] = local_noise[key]
             qubit_index[str(comp.get("id", f"q{len(qubits)}"))] = len(qubits)
             qubits.append(q_payload)
             if str(basis.get("kind", "")).strip().lower() == "nlevel":
@@ -714,17 +638,6 @@ def normalize_device_payload(device: dict | None) -> dict[str, object]:
             normalized["qubit_freqs_Hz"] = [float((q or {}).get("freq_Hz", 0.0)) for q in qubits]
         if "anharmonicity_Hz" not in normalized:
             normalized["anharmonicity_Hz"] = [float((q or {}).get("anharmonicity_Hz", -0.2)) for q in qubits]
-        for src_key, dst_key in (
-            ("T1_s", "T1_s"),
-            ("T2_s", "T2_s"),
-            ("Tphi_s", "Tphi_s"),
-            ("Tup_s", "Tup_s"),
-            ("gamma1_Hz", "gamma1_Hz"),
-            ("gamma_phi_Hz", "gamma_phi_Hz"),
-            ("gamma_up_Hz", "gamma_up_Hz"),
-        ):
-            if dst_key not in normalized and any(src_key in (q or {}) for q in qubits):
-                normalized[dst_key] = [float((q or {}).get(src_key, 0.0)) for q in qubits]
     return normalized
 
 

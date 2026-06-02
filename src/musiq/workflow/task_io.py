@@ -10,7 +10,6 @@ from typing import Any
 import yaml
 
 from musiq.backend.config import validate_backend_config
-from musiq.common.schemas import CircuitIR, CircuitGate
 from musiq.pulse.catalog import validate_typed_pulse_schema
 from musiq.schemas.utils import ParameterSweepConfig, ParameterList
 from musiq.workflow.contracts import (
@@ -72,141 +71,17 @@ _ANALYSER_TOP_KEYS = {
     "template",
     "solver_id",
     "trajectory",
-    "case_metrics",
-    "sweep_metrics",
-    "metrics",
-    "parametric_metrics",
     "readout_model",
     "iq_discrimination",
     "noise_analysis",
     "report",
     "analysis",
 }
-_CIRCUIT_TOP_KEYS = {"schema_version", "format", "qasm_text", "qasm_path", "param_bindings", "num_qubits", "num_clbits", "schedule", "circuit"}
-def _is_v1_circuit_payload(payload: dict[str, Any]) -> bool:
-    return isinstance(payload.get("circuit"), dict)
+_CIRCUIT_TOP_KEYS = {"schema_version", "qasm_text", "qasm_path", "param_bindings"}
 
 
 def _is_v3_solver_payload(payload: dict[str, Any]) -> bool:
     return isinstance(payload.get("solver"), dict)
-
-
-def _map_circuit_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if _is_v1_circuit_payload(payload):
-        circuit = dict(payload.get("circuit", {}) or {})
-        return {
-            "schema_version": str(payload.get("schema_version", "1.0")),
-            "format": str(circuit.get("format", payload.get("format", "openqasm3")) or "openqasm3"),
-            "qasm_text": circuit.get("qasm_text"),
-            "qasm_path": circuit.get("qasm_path"),
-            "num_qubits": circuit.get("num_qubits"),
-            "num_clbits": circuit.get("num_clbits"),
-            "schedule": circuit.get("schedule"),
-            "param_bindings": dict(circuit.get("param_bindings", {}) or {}) or None,
-        }
-    return payload
-
-
-def _build_circuit_ir_from_schedule_payload(payload: dict[str, Any]) -> CircuitIR:
-    raw_schedule = dict(payload.get("schedule", {}) or {})
-    num_qubits = int(payload.get("num_qubits", 0) or 0)
-    num_clbits = int(payload.get("num_clbits", 0) or 0)
-    schedule: dict[int, list[list[CircuitGate]]] = {}
-    for raw_tick, raw_lanes in raw_schedule.items():
-        tick = int(raw_tick)
-        lanes: list[list[CircuitGate]] = []
-        for raw_lane in list(raw_lanes or []):
-            lane_gates: list[CircuitGate] = []
-            for raw_gate in list(raw_lane or []):
-                if isinstance(raw_gate, dict):
-                    lane_gates.append(
-                        CircuitGate(
-                            name=str(raw_gate.get("name", "")).strip(),
-                            qubits=[int(q) for q in list(raw_gate.get("qubits", []) or [])],
-                            params=[float(p) for p in list(raw_gate.get("params", []) or [])],
-                            clbits=[int(c) for c in list(raw_gate.get("clbits", []) or [])],
-                        )
-                    )
-                    continue
-                if not isinstance(raw_gate, list) or len(raw_gate) < 2:
-                    raise ValueError(f"Invalid schedule gate entry at tick {tick}: {raw_gate!r}")
-                gate_name = str(raw_gate[0]).strip()
-                gate_qubits = [int(q) for q in list(raw_gate[1] or [])]
-                gate_params = [float(raw_gate[2])] if len(raw_gate) >= 3 and raw_gate[2] is not None else []
-                lane_gates.append(CircuitGate(name=gate_name, qubits=gate_qubits, params=gate_params))
-            lanes.append(lane_gates)
-        schedule[tick] = lanes
-    return CircuitIR(
-        schema_version=str(payload.get("schema_version", "1.0")),
-        format=str(payload.get("format", "circuit_layer_yaml") or "circuit_layer_yaml"),
-        num_qubits=num_qubits,
-        num_clbits=num_clbits,
-        schedule=schedule,
-    )
-
-
-def _infer_schedule_dimensions(raw_schedule: Mapping[str | int, Any]) -> tuple[int, int]:
-    max_qubit = -1
-    max_clbit = -1
-    max_lane_count = 0
-    for raw_lanes in raw_schedule.values():
-        lanes_list = list(raw_lanes or [])
-        max_lane_count = max(max_lane_count, len(lanes_list))
-        for raw_lane in lanes_list:
-            for raw_gate in list(raw_lane or []):
-                if isinstance(raw_gate, Mapping):
-                    qubits = [int(q) for q in list(raw_gate.get("qubits", []) or [])]
-                    clbits = [int(c) for c in list(raw_gate.get("clbits", []) or [])]
-                elif isinstance(raw_gate, list) and len(raw_gate) >= 2:
-                    qubits = [int(q) for q in list(raw_gate[1] or [])]
-                    clbits = []
-                else:
-                    continue
-                if qubits:
-                    max_qubit = max(max_qubit, max(qubits))
-                if clbits:
-                    max_clbit = max(max_clbit, max(clbits))
-    inferred_qubits = max(max_lane_count, max_qubit + 1 if max_qubit >= 0 else 0)
-    inferred_clbits = max_clbit + 1 if max_clbit >= 0 else 0
-    return inferred_qubits, inferred_clbits
-
-
-def circuit_from_schedule_payload(
-    schedule_or_payload: Mapping[str | int, Any],
-    *,
-    num_qubits: int | None = None,
-    num_clbits: int | None = None,
-    schema_version: str = "1.0",
-    format: str = "circuit_layer_yaml",
-    param_bindings: Mapping[str, float] | None = None,
-) -> CircuitConfig:
-    """Build ``CircuitConfig`` from either a raw schedule mapping or a schedule-style payload."""
-    payload = dict(schedule_or_payload or {})
-    if "schedule" not in payload:
-        payload = {"schedule": payload}
-
-    raw_schedule = payload.get("schedule")
-    if not isinstance(raw_schedule, Mapping):
-        raise ValueError("Schedule payload must be a mapping or contain a top-level `schedule` mapping.")
-
-    inferred_qubits, inferred_clbits = _infer_schedule_dimensions(dict(raw_schedule or {}))
-    payload["schema_version"] = str(payload.get("schema_version", schema_version) or schema_version)
-    payload["format"] = str(payload.get("format", format) or format)
-    payload["num_qubits"] = int(
-        num_qubits
-        if num_qubits is not None
-        else payload.get("num_qubits", inferred_qubits) or inferred_qubits
-    )
-    payload["num_clbits"] = int(
-        num_clbits
-        if num_clbits is not None
-        else payload.get("num_clbits", inferred_clbits) or inferred_clbits
-    )
-    if param_bindings is not None:
-        payload["param_bindings"] = dict(param_bindings)
-
-    return circuit_from_payload(payload)
-
 
 def _resolve_path(base_dir: Path, value: str | None) -> str | None:
     if not value:
@@ -378,17 +253,7 @@ def _validate_pulse_payload(payload: dict[str, Any]) -> None:
 
 def circuit_from_payload(payload: dict[str, Any], base_dir: Path | None = None) -> CircuitConfig:
     """Convert a circuit payload dictionary into a ``CircuitConfig`` object."""
-    payload = _map_circuit_payload(payload)
-    _reject_unknown("circuit top-level", set(payload), _CIRCUIT_TOP_KEYS - {"circuit"})
-
-    if payload.get("schedule") is not None:
-        if payload.get("qasm_text") or payload.get("qasm_path"):
-            raise ValueError("Circuit config must not mix schedule input with qasm_text/qasm_path.")
-        return CircuitConfig(
-            qasm_text=None,
-            circuit_ir=_build_circuit_ir_from_schedule_payload(payload),
-            param_bindings=dict(payload.get("param_bindings", {}) or {}) or None,
-        )
+    _reject_unknown("circuit top-level", set(payload), _CIRCUIT_TOP_KEYS)
 
     qasm_text = payload.get("qasm_text")
     qasm_path = payload.get("qasm_path")
@@ -411,27 +276,6 @@ def load_circuit_config_file(path: str | Path) -> CircuitConfig:
     """Load a circuit config file into ``CircuitConfig``."""
     cfg_path, payload = _load_mapping(path)
     return circuit_from_payload(payload, base_dir=cfg_path.parent)
-
-
-def load_circuit_schedule_file(
-    path: str | Path,
-    *,
-    num_qubits: int | None = None,
-    num_clbits: int | None = None,
-    schema_version: str = "1.0",
-    format: str = "circuit_layer_yaml",
-    param_bindings: Mapping[str, float] | None = None,
-) -> CircuitConfig:
-    """Load a raw schedule YAML/JSON file into ``CircuitConfig``."""
-    _, payload = _load_mapping(path)
-    return circuit_from_schedule_payload(
-        payload,
-        num_qubits=num_qubits,
-        num_clbits=num_clbits,
-        schema_version=schema_version,
-        format=format,
-        param_bindings=param_bindings,
-    )
 def solver_from_payload(payload: dict[str, Any], base_dir: Path | None = None) -> SolverConfig:
     """Convert a solver payload dictionary into a ``SolverConfig`` object."""
     payload = _apply_template("solvers", payload)
@@ -579,10 +423,6 @@ def analyser_from_payload(payload: dict[str, Any]) -> AnalyserConfig:
         solver_id=str(payload.get("solver_id")).strip() or None if payload.get("solver_id") is not None else None,
         trajectory=AnalyserTrajectoryConfig(**trajectory_known, extras=trajectory_extras),
         analysis=analysis_steps,
-        case_metrics=list(payload.get("case_metrics", []) or payload.get("metrics", []) or []) or None,
-        sweep_metrics=list(payload.get("sweep_metrics", []) or payload.get("parametric_metrics", []) or []) or None,
-        metrics=list(payload.get("metrics", []) or []) or None,
-        parametric_metrics=list(payload.get("parametric_metrics", []) or []) or None,
         readout_model=ReadoutModelConfig(**readout_known, extras=readout_extras),
         iq_discrimination=IQDiscriminationConfig(**iq_known, extras=iq_extras),
         noise_analysis=NoiseAnalysisConfig(**noise_known, extras=noise_extras),
@@ -771,13 +611,11 @@ __all__ = [
     "load_config_bundle_files",
     "load_analyser_config_file",
     "load_circuit_config_file",
-    "load_circuit_schedule_file",
     "load_device_config_file",
     "load_pulse_config_file",
     "load_solver_config_file",
     "load_config",
     "circuit_from_payload",
-    "circuit_from_schedule_payload",
     "solver_from_payload",
     "device_from_payload",
     "pulse_from_payload",

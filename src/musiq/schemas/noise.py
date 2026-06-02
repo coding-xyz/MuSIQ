@@ -65,7 +65,7 @@ class NoiseSourceSpec:
         targets: List of subsystem IDs affected by this noise.
         operator: Symbolic operator associated with the noise. Defaults to "".
         amplitude: Numerical amplitude of the noise.
-        rate: Transition rate or decay rate.
+        parameters: Model-specific scalar parameters such as gamma or T constants.
         spectrum: Spectral density information.
         band_Hz: Frequency band limits in Hz.
         exponent: Spectral exponent (e.g., for 1/f noise).
@@ -81,7 +81,7 @@ class NoiseSourceSpec:
     targets: list[str] = field(default_factory=list)
     operator: str = ""
     amplitude: dict[str, Any] = field(default_factory=dict)
-    rate: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     spectrum: dict[str, Any] = field(default_factory=dict)
     band_Hz: list[float] = field(default_factory=list)
     exponent: float | None = None
@@ -111,7 +111,7 @@ class NoiseSourceSpec:
             targets=_as_str_list(raw.get("targets", raw.get("target"))),
             operator=str(raw.get("operator", "") or ""),
             amplitude=dict(raw.get("amplitude", {}) or {}),
-            rate=dict(raw.get("rate", {}) or {}),
+            parameters=dict(raw.get("parameters", {}) or {}),
             spectrum=dict(raw.get("spectrum", {}) or {}),
             band_Hz=[float(x) for x in list(band or [])],
             exponent=None if raw.get("exponent") is None else float(raw.get("exponent")),
@@ -430,7 +430,7 @@ class NoiseSpec:
         readout_crosstalk: Specifications for readout crosstalk.
         collapse_channels: List of Markovian collapse channels.
         stochastic_channels: List of stochastic noise channels.
-        per_qubit_rates: Summary of per-qubit Markovian rates (legacy/compatibility).
+        per_qubit_rates: Summary of per-qubit Markovian rates derived from authored collapse channels.
         supported: List of noise features supported by the current engine.
         unsupported: List of noise features not supported.
         warnings: List of warnings regarding the noise configuration.
@@ -480,4 +480,3 @@ class NoiseSpec:
             item if isinstance(item, PerQubitRateSpec) else PerQubitRateSpec.from_dict(item)
             for item in list(self.per_qubit_rates or [])
         ]
-

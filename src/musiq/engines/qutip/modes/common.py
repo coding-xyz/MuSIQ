@@ -12,7 +12,7 @@ from musiq.engines.qutip.runtime import QutipPlan, QutipSolverInputs, QutipSyste
 def base_metadata(setup: QutipPlan, solver_inputs: QutipSolverInputs) -> dict[str, Any]:
     """Build common trajectory metadata for QuTiP mode outputs."""
     model_spec = setup.model_spec
-    return {
+    metadata = {
         "solver": setup.solver,
         "model_type": setup.model_type,
         "num_qubits": setup.n_qubits,
@@ -23,6 +23,8 @@ def base_metadata(setup: QutipPlan, solver_inputs: QutipSolverInputs) -> dict[st
         "frame_mode": setup.frame_mode,
         "rwa": setup.rwa,
     }
+    metadata.update(dict(getattr(solver_inputs, "runtime_metadata", {}) or {}))
+    return metadata
 
 
 def build_base_e_ops(engine, setup: QutipPlan, system: QutipSystem) -> tuple[list[Any], dict[str, Any]]:

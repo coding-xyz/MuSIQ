@@ -9,9 +9,17 @@ device:
       parameters:
         freq_Hz: 4.910e9
         anharmonicity_Hz: -2.00e8
-      noise: 
-        T1_s: 26.0e-6
-        Tphi_s: 22.0e-6
+      noise:
+        - id: q0_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 26.0e-6
+        - id: q0_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 22.0e-6
     - id: q1
       type: transmon
       description: qubit 1 of linear chain
@@ -20,9 +28,17 @@ device:
       parameters:
         freq_Hz: 4.930e9
         anharmonicity_Hz: -1.98e8
-      noise: 
-        T1_s: 25.2e-6
-        Tphi_s: 21.5e-6
+      noise:
+        - id: q1_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 25.2e-6
+        - id: q1_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 21.5e-6
     - id: q2
       type: transmon
       description: qubit 2 of linear chain
@@ -31,9 +47,17 @@ device:
       parameters:
         freq_Hz: 4.950e9
         anharmonicity_Hz: -2.02e8
-      noise: 
-        T1_s: 27.1e-6
-        Tphi_s: 23.1e-6
+      noise:
+        - id: q2_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 27.1e-6
+        - id: q2_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 23.1e-6
     - id: q3
       type: transmon
       description: qubit 3 of linear chain
@@ -42,9 +66,17 @@ device:
       parameters:
         freq_Hz: 4.970e9
         anharmonicity_Hz: -1.97e8
-      noise: 
-        T1_s: 24.8e-6
-        Tphi_s: 20.8e-6
+      noise:
+        - id: q3_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 24.8e-6
+        - id: q3_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 20.8e-6
     - id: q4
       type: transmon
       description: qubit 4 of linear chain
@@ -53,9 +85,17 @@ device:
       parameters:
         freq_Hz: 4.990e9
         anharmonicity_Hz: -2.01e8
-      noise: 
-        T1_s: 26.5e-6
-        Tphi_s: 22.4e-6
+      noise:
+        - id: q4_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 26.5e-6
+        - id: q4_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 22.4e-6
     - id: q5
       type: transmon
       description: qubit 5 of linear chain
@@ -64,9 +104,17 @@ device:
       parameters:
         freq_Hz: 5.010e9
         anharmonicity_Hz: -1.99e8
-      noise: 
-        T1_s: 25.5e-6
-        Tphi_s: 21.2e-6
+      noise:
+        - id: q5_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 25.5e-6
+        - id: q5_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 21.2e-6
     - id: q6
       type: transmon
       description: qubit 6 of linear chain
@@ -75,9 +123,17 @@ device:
       parameters:
         freq_Hz: 5.030e9
         anharmonicity_Hz: -2.03e8
-      noise: 
-        T1_s: 28.0e-6
-        Tphi_s: 24.0e-6
+      noise:
+        - id: q6_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 28.0e-6
+        - id: q6_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 24.0e-6
     - id: q7
       type: transmon
       description: qubit 7 of linear chain
@@ -86,9 +142,17 @@ device:
       parameters:
         freq_Hz: 5.050e9
         anharmonicity_Hz: -1.96e8
-      noise: 
-        T1_s: 24.2e-6
-        Tphi_s: 20.1e-6
+      noise:
+        - id: q7_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 24.2e-6
+        - id: q7_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 20.1e-6
     - id: q8
       type: transmon
       description: qubit 8 of linear chain
@@ -97,9 +161,17 @@ device:
       parameters:
         freq_Hz: 5.070e9
         anharmonicity_Hz: -2.01e8
-      noise: 
-        T1_s: 26.1e-6
-        Tphi_s: 22.8e-6
+      noise:
+        - id: q8_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 26.1e-6
+        - id: q8_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 22.8e-6
     - id: q9
       type: transmon
       description: qubit 9 of linear chain
@@ -108,9 +180,17 @@ device:
       parameters:
         freq_Hz: 5.090e9
         anharmonicity_Hz: -1.99e8
-      noise: 
-        T1_s: 25.8e-6
-        Tphi_s: 21.9e-6
+      noise:
+        - id: q9_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 25.8e-6
+        - id: q9_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 21.9e-6
   connections:
     - id: zz_q0_q1
       type: zz

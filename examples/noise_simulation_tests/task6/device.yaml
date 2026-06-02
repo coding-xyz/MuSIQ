@@ -13,12 +13,12 @@ device:
         - id: q0_T1
           kind: markovian
           operator: lowering
-          rate:
+          parameters:
             T1_s: 24.0e-6
         - id: q0_Tphi
           kind: markovian
           operator: sigma_z_over_2
-          rate:
+          parameters:
             Tphi_s: 19.764706e-6
     - id: q1
       type: transmon
@@ -32,12 +32,12 @@ device:
         - id: q1_T1
           kind: markovian
           operator: lowering
-          rate:
+          parameters:
             T1_s: 22.0e-6
         - id: q1_Tphi
           kind: markovian
           operator: sigma_z_over_2
-          rate:
+          parameters:
             Tphi_s: 16.5e-6
   connections:
     - id: zz_q0_q1

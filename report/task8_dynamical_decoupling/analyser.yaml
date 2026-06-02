@@ -1,0 +1,7 @@
+schema_version: "1.0"
+analysis:
+  - name: state_analysis
+    level: CASE
+    metrics:
+      - population
+      - coherence_01

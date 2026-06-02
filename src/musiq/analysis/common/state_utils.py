@@ -9,6 +9,30 @@ import numpy as np
 from musiq.common.schemas import Trajectory
 
 
+def quantum_state_series(trajectory: Trajectory) -> tuple[str, list[Any]]:
+    """Return the primary quantum-state kind and its time-ordered snapshots."""
+    density_matrix = getattr(trajectory, "density_matrix", None)
+    wave_function = getattr(trajectory, "wave_function", None)
+
+    if isinstance(density_matrix, dict):
+        snapshots = list(density_matrix.get("snapshots", []) or [])
+        if snapshots:
+            return "density_matrix", snapshots
+    elif isinstance(density_matrix, list):
+        if density_matrix:
+            return "density_matrix", list(density_matrix)
+
+    if isinstance(wave_function, dict):
+        snapshots = list(wave_function.get("snapshots", []) or [])
+        if snapshots:
+            return "wave_function", snapshots
+    elif isinstance(wave_function, list):
+        if wave_function:
+            return "wave_function", list(wave_function)
+
+    return "", []
+
+
 def final_density_matrix(source: Any) -> np.ndarray:
     """Return the final density matrix from a trajectory-like object.
 
@@ -27,8 +51,11 @@ def final_density_matrix(source: Any) -> np.ndarray:
     if not isinstance(trajectory, Trajectory) and not hasattr(trajectory, "density_matrix"):
         raise TypeError("source must be a Trajectory, solver-run bundle, or Model with density-matrix results")
 
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    snapshots = list(density_matrix.get("snapshots", []) or [])
+    actual_kind, snapshots = quantum_state_series(trajectory)
+    if actual_kind != "density_matrix":
+        density_matrix = getattr(trajectory, "density_matrix", None)
+        if isinstance(density_matrix, list) and density_matrix:
+            snapshots = list(density_matrix)
     if not snapshots:
         raise ValueError("trajectory does not contain density_matrix snapshots")
     return np.asarray(snapshots[-1], dtype=complex)
@@ -98,23 +125,9 @@ def label_excitation_value(label: str, *, num_qubits: int) -> float:
 
 def population_series(trajectory: Trajectory, model_spec: Any) -> dict[str, list[float]]:
     """Extract population time-series for all basis states."""
-    # Quantum state path
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
-    
-    if density_matrix:
-        qstate = density_matrix
-    elif wave_function:
-        qstate = wave_function
-    else:
-        # Fallback to classical path
-        return _population_series_from_classical(trajectory)
-
-    snapshots = list(qstate.get("snapshots", []) or [])
+    actual_kind, snapshots = quantum_state_series(trajectory)
     if not snapshots:
         return _population_series_from_classical(trajectory)
-
-    actual_kind = str(qstate.get("actual_kind", "")).strip().lower()
     num_qubits = int(model_spec.system.num_qubits or 0)
     levels = (
         int(model_spec.system.transmon_levels or 2)
@@ -202,11 +215,9 @@ def variance_series(series: dict[str, list[float]], model_spec: Any) -> list[flo
 
 def coherence_series(trajectory: Trajectory, model_spec: Any, state_a: str = "0", state_b: str = "1") -> dict[str, list[float]]:
     """Extract the magnitude of the coherence between two states as a time series."""
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
-    if not density_matrix:
+    actual_kind, snapshots = quantum_state_series(trajectory)
+    if actual_kind != "density_matrix":
         return {}
-    
-    snapshots = list(density_matrix.get("snapshots", []) or [])
     if not snapshots:
         return {}
 

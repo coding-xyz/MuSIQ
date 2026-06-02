@@ -1,0 +1,34 @@
+schema_version: "3.0"
+device:
+  simulation_level: nlevel
+  control_scale: 1.0
+  components:
+    - id: q0
+      type: transmon
+      description: single-qubit dynamical decoupling testbed
+      levels: 3
+      ports:
+        drive: drive_port
+      parameters:
+        freq_Hz: 5.0e9
+        anharmonicity_Hz: -2.0e8
+      noise:
+        - id: q0_T1
+          kind: markovian
+          operator: lowering
+          parameters:
+            T1_s: 60.0e-6
+        - id: q0_Tphi
+          kind: markovian
+          operator: sigma_z_over_2
+          parameters:
+            Tphi_s: 80.0e-6
+        - id: q0_ou_case
+          kind: ou
+          targets: [q0]
+          operator: sigma_z_over_2
+          amplitude:
+            sigma_Hz: 2.0e6
+            tau_s: 80e-6
+  connections: []
+  noise: {}

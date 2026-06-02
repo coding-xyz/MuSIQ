@@ -39,10 +39,13 @@ from musiq.workflow.model_utils import (
 )
 from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.workflow.model_execution import (
+    build_solver,
+    build_study,
     find_run_id,
     run,
     run_all,
     run_analysis,
+    run_engine,
     run_profile,
     run_solver,
     run_study,
@@ -80,11 +83,24 @@ class ModelRegistry:
 class Solver:
     """Wrapper for solver configuration and execution."""
     model: Any
+    solver_id: str
     config: SolverConfig
+
+    def build_study(self, *, study_name: str | None = None, study_index: int | None = None, tag: str | None = None) -> list[str]:
+        """Compile one specific study step into ``model.runs`` without running the engine."""
+        return build_study(self.model, solver_id=self.solver_id, study_name_val=study_name, study_index=study_index, tag=tag)
+
+    def build(self, tag: str | None = None) -> list[str]:
+        """Compile every study step for this solver without running the engine."""
+        return build_solver(self.model, solver_id=self.solver_id, tag=tag)
 
     def run_study(self, *, study_name: str | None = None, study_index: int | None = None) -> str:
         """Compile and solve one specific study step into ``model.runs``."""
-        return run_study(self.model, solver_id=None, study_name_val=study_name, study_index=study_index)
+        return run_study(self.model, solver_id=self.solver_id, study_name_val=study_name, study_index=study_index)
+
+    def run_engine(self, tag: str | None = None) -> list[str]:
+        """Run the numerical engine for every study step of this solver."""
+        return run_engine(self.model, solver_id=self.solver_id, tag=tag)
 
 @dataclass(slots=True)
 class Profile:
@@ -93,12 +109,30 @@ class Profile:
     profile_id: str
     config: ProfileConfig
 
+    def build_solver(self, solver_id: str | None = None, tag: str | None = None) -> list[str]:
+        """Compile one configured solver without running the engine."""
+        original_profiles = dict(self.model.config.profiles)
+        try:
+            self.model.config.profiles = {self.profile_id: self.config}
+            return build_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
+        finally:
+            self.model.config.profiles = original_profiles
+
     def run_solver(self, solver_id: str | None = None, tag: str | None = None) -> list[str]:
         """Compile and solve one configured solver, running every study step by default."""
         original_profiles = dict(self.model.config.profiles)
         try:
             self.model.config.profiles = {self.profile_id: self.config}
             return run_solver(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
+        finally:
+            self.model.config.profiles = original_profiles
+
+    def run_engine(self, solver_id: str | None = None, tag: str | None = None) -> list[str]:
+        """Run the numerical engine for one configured solver."""
+        original_profiles = dict(self.model.config.profiles)
+        try:
+            self.model.config.profiles = {self.profile_id: self.config}
+            return run_engine(self.model, solver_id=solver_id or self.config.solver_id, tag=tag)
         finally:
             self.model.config.profiles = original_profiles
 
@@ -114,7 +148,7 @@ class Model:
     state: ModelState = field(default_factory=ModelState)
     registry: ModelRegistry = field(default_factory=ModelRegistry)
     manifest: ModelManifest = field(default_factory=ModelManifest)
-    runs: dict[str, dict[str, ModelRun]] = field(default_factory=dict)
+    runs: dict[str, ModelRun] = field(default_factory=dict)
     analyses: dict[str, ModelAnalysis] = field(default_factory=dict)
 
     @property
@@ -125,7 +159,7 @@ class Model:
         return next(iter(self.config.devices.values()))
     @property
     def solvers(self) -> dict[str, Solver]: 
-        return {sid: Solver(self, cfg) for sid, cfg in self.config.solvers.items()}
+        return {sid: Solver(self, sid, cfg) for sid, cfg in self.config.solvers.items()}
     @property
     def pulse(self) -> PulseConfig: 
         return next(iter(self.config.pulses.values()))
@@ -140,7 +174,7 @@ class Model:
     def out_dir(self, value: str | None): self.state.last_out_dir = value
 
     def __repr__(self) -> str:
-        run_summary = {sid: sorted(studies.keys()) for sid, studies in self.runs.items()}
+        run_summary = sorted(self.runs.keys())
         analysis_ids = sorted(self.analyses.keys())
         return (
             'Model('
@@ -152,23 +186,26 @@ class Model:
         )
 
     def _clear_solver_results(self, solver_id: str) -> None:
-        self.runs.pop(solver_id, None)
+        self.runs = {
+            run_id: run_obj
+            for run_id, run_obj in self.runs.items()
+            if str(run_obj.identity.solver_id) != str(solver_id)
+        }
 
     def get_trajectory(self, solver_id: str | None = None, *, study_name: str | None = None) -> Trajectory | None:
         from musiq.workflow.model_utils import require_solver_id
         selected_solver_id = require_solver_id(self, solver_id)
-        
-        solver_runs = self.runs.get(selected_solver_id, {})
-        if study_name is None:
-            # Default to the first available study if none specified
-            if not solver_runs:
-                return None
-            run_obj = next(iter(solver_runs.values()))
-        else:
-            run_obj = solver_runs.get(study_name)
-            if run_obj is None:
-                return None
-        
+
+        matching_runs = [
+            run_obj
+            for run_obj in self.runs.values()
+            if str(run_obj.identity.solver_id) == selected_solver_id
+            and (study_name is None or str(run_obj.identity.study_name or "").strip() == str(study_name).strip())
+        ]
+        if not matching_runs:
+            return None
+        run_obj = matching_runs[0]
+
         first_res = next(iter(run_obj.results.values()), None)
         return next(iter(first_res.trajectories.values()), None) if first_res else None
 
@@ -191,13 +228,9 @@ class Model:
         wanted = str(study_name).strip()
         for analysis in matching:
             for ref in analysis.input_results:
-                # ref.run_id in the new structure is actually the study_name
-                # since it's stored under self.runs[solver_id][study_name]
-                # We need to check if this run_id (study_name) matches in any solver
-                for solver_id in self.runs:
-                    run_obj = self.runs[solver_id].get(ref.run_id)
-                    if run_obj and str(run_obj.identity.study_name or "").strip() == wanted:
-                        return analysis
+                run_obj = self.runs.get(str(ref.run_id))
+                if run_obj and str(run_obj.identity.study_name or "").strip() == wanted:
+                    return analysis
         return None
 
     def find_analysis_for_run(self, run_id: str) -> ModelAnalysis | None:
@@ -244,6 +277,21 @@ class Model:
     def run_all(self) -> None:
         """Run every configured solver and then every configured analyser."""
         run_all(self)
+
+    def build(self, solver_id: str | None = None, *, study_name: str | None = None, study_index: int | None = None, tag: str | None = None) -> list[str]:
+        """Compile workflow artifacts without running the numerical engine."""
+        if study_name is not None or study_index is not None:
+            return build_study(self, solver_id=solver_id, study_name_val=study_name, study_index=study_index, tag=tag)
+        if solver_id is not None:
+            return build_solver(self, solver_id=solver_id, tag=tag)
+        built: list[str] = []
+        for profile_id in sorted(self.config.profiles.keys()):
+            built.extend(self.profile(profile_id).build_solver(tag=tag))
+        return built
+
+    def run_engine(self, solver_id: str | None = None, *, tag: str | None = None) -> list[str]:
+        """Run the numerical engine using built artifacts, auto-building when needed."""
+        return run_engine(self, solver_id=solver_id, tag=tag)
 
     def run(self) -> None:
         """Run all configured solvers and analysers."""

@@ -239,8 +239,8 @@ def run_engine_stage(
             run_options["julia_depot_path"] = str(julia_depot_path)
         trajectory = selected.run(model_spec, run_options=run_options)
     metadata = dict(getattr(trajectory, "metadata", {}) or {})
-    wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
+    wave_function = getattr(trajectory, "wave_function", None)
+    density_matrix = getattr(trajectory, "density_matrix", None)
     classical = dict(getattr(trajectory, "classical", {}) or {})
     measurements = dict(getattr(trajectory, "measurements", {}) or {})
     details = dict(metadata.get("details", {}) or {})
@@ -253,11 +253,20 @@ def run_engine_stage(
     actual_kind = str(qstate.get("actual_kind", "")).strip().lower()
     if qstate:
         if actual_kind == "wave_function":
-            wave_function.update(qstate)
+            if isinstance(wave_function, dict):
+                wave_function.update(qstate)
+            elif wave_function is None:
+                wave_function = dict(qstate)
         elif actual_kind == "density_matrix":
-            density_matrix.update(qstate)
+            if isinstance(density_matrix, dict):
+                density_matrix.update(qstate)
+            elif density_matrix is None:
+                density_matrix = dict(qstate)
         else:
-            density_matrix.update(qstate)
+            if isinstance(density_matrix, dict):
+                density_matrix.update(qstate)
+            elif density_matrix is None:
+                density_matrix = dict(qstate)
     if "readout_observables" in metadata:
         classical["readout"] = dict(metadata.pop("readout_observables", {}) or {})
     if "readout_observables" in details and "readout" not in classical:
@@ -281,14 +290,14 @@ def run_engine_stage(
     if wave_function:
         descriptions["wave_function"] = {
             "meaning": "Complex wave-function snapshots psi(t) over time.",
-            "encoding": str(wave_function.get("encoding", "complex")),
+            "encoding": str(wave_function.get("encoding", "complex")) if isinstance(wave_function, dict) else "complex",
             "shape": "[time][hilbert_index]",
             "representation": "ket",
         }
     if density_matrix:
         descriptions["density_matrix"] = {
             "meaning": "Complex density-matrix snapshots rho(t) over time.",
-            "encoding": str(density_matrix.get("encoding", "complex")),
+            "encoding": str(density_matrix.get("encoding", "complex")) if isinstance(density_matrix, dict) else "complex",
             "shape": "[time][hilbert_index][hilbert_index]",
             "representation": "operator",
         }
@@ -371,27 +380,27 @@ def _resolve_analysis_trajectory(trajectory, analyser_cfg: dict | None) -> dict:
     save_jump_events = bool(trajectory_cfg.get("save_jump_events", False))
     save_measurement_records = bool(trajectory_cfg.get("save_measurement_records", False))
     requested_kind = str(trajectory_cfg.get("quantum", "")).strip().lower()
-    wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
-    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
+    wave_function = getattr(trajectory, "wave_function", None)
+    density_matrix = getattr(trajectory, "density_matrix", None)
     payload = {}
     if include_times:
         payload["times"] = list(trajectory.times)
     if requested_kind == "wave_function" and wave_function:
-        payload["wave_function"] = list(wave_function.get("snapshots", []) or [])
-        if wave_function.get("runs"):
+        payload["wave_function"] = list(wave_function.get("snapshots", []) or []) if isinstance(wave_function, dict) else list(wave_function)
+        if isinstance(wave_function, dict) and wave_function.get("runs"):
             payload["wave_function_runs"] = list(wave_function.get("runs", []) or [])
     elif requested_kind == "density_matrix" and density_matrix:
-        payload["density_matrix"] = list(density_matrix.get("snapshots", []) or [])
-        if density_matrix.get("runs"):
+        payload["density_matrix"] = list(density_matrix.get("snapshots", []) or []) if isinstance(density_matrix, dict) else list(density_matrix)
+        if isinstance(density_matrix, dict) and density_matrix.get("runs"):
             payload["density_matrix_runs"] = list(density_matrix.get("runs", []) or [])
     else:
         if density_matrix:
-            payload["density_matrix"] = list(density_matrix.get("snapshots", []) or [])
-            if density_matrix.get("runs"):
+            payload["density_matrix"] = list(density_matrix.get("snapshots", []) or []) if isinstance(density_matrix, dict) else list(density_matrix)
+            if isinstance(density_matrix, dict) and density_matrix.get("runs"):
                 payload["density_matrix_runs"] = list(density_matrix.get("runs", []) or [])
         elif wave_function:
-            payload["wave_function"] = list(wave_function.get("snapshots", []) or [])
-            if wave_function.get("runs"):
+            payload["wave_function"] = list(wave_function.get("snapshots", []) or []) if isinstance(wave_function, dict) else list(wave_function)
+            if isinstance(wave_function, dict) and wave_function.get("runs"):
                 payload["wave_function_runs"] = list(wave_function.get("runs", []) or [])
     if getattr(trajectory, "classical", None):
         payload["classical"] = dict(trajectory.classical or {})
@@ -407,7 +416,7 @@ def _resolve_analysis_trajectory(trajectory, analyser_cfg: dict | None) -> dict:
             payload["final_wave_function"] = payload["wave_function"][-1]
     if save_jump_events:
         payload["jump_events"] = list((trajectory.metadata or {}).get("jump_events", []) or [])
-    if density_matrix.get("note"):
+    if isinstance(density_matrix, dict) and density_matrix.get("note"):
         payload["note"] = str(density_matrix.get("note"))
     elif wave_function.get("note"):
         payload["note"] = str(wave_function.get("note"))
@@ -419,13 +428,20 @@ def _resolve_analysis_trajectory(trajectory, analyser_cfg: dict | None) -> dict:
     return payload
 
 
-def _resolve_metric_payload(trajectory, model_spec, analyser_cfg: dict | None, metric_registry=None) -> tuple[dict, Observables, Report]:
-    return resolve_metrics_payload(trajectory, model_spec, analyser_cfg, registry=metric_registry)
+def _resolve_metric_payload(trajectory, model_spec, analyser_cfg: dict | None, metric_registry=None, trajectories=None) -> tuple[dict, Observables, Report]:
+    return resolve_metrics_payload(
+        trajectory,
+        model_spec,
+        analyser_cfg,
+        registry=metric_registry,
+        trajectories=trajectories,
+    )
 
 
 def run_analysis_stage(
     *,
     trajectory,
+    trajectories=None,
     model_spec,
     pulse_ir,
     pulse_cfg: dict | None,
@@ -448,6 +464,7 @@ def run_analysis_stage(
         model_spec,
         analyser_cfg,
         metric_registry=metric_registry,
+        trajectories=trajectories,
     )
     
     # 2. Handle Specific Analysis Steps (Level-Aware)
@@ -461,16 +478,21 @@ def run_analysis_stage(
         name_to_kind = {
             "readout_analysis": "READOUT",
             "state_analysis": "SINGLE_QUBIT",
+            "single_qubit_analysis": "SINGLE_QUBIT",
         }
         kind = name_to_kind.get(step.get("name"), step.get("kind"))
         if not kind:
             continue
 
         try:
+            if kind == "SINGLE_QUBIT":
+                case_metrics_override = dict(metrics_out or {})
+                continue
             res = dispatch_analysis(
                 level="CASE",
                 kind=kind,
                 trajectory=trajectory,
+                trajectories=trajectories,
                 model_spec=model_spec,
                 pulse_ir=pulse_ir,
                 pulse_cfg=pulse_cfg,

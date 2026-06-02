@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import time
 import numpy as np
+from copy import deepcopy
 from dataclasses import asdict, is_dataclass, replace
 from typing import Any
 from pathlib import Path
 
 from musiq.analysis.definitions import collect_analysis_metrics
-from musiq.analysis.common.state_utils import final_density_matrix, state_fidelity
+from musiq.analysis.common.state_utils import (
+    complex_scalar,
+    final_density_matrix,
+    quantum_state_series,
+    state_fidelity,
+)
 from musiq.workflow.contracts import (
     AnalyserConfig,
     CircuitConfig,
@@ -39,6 +45,7 @@ from musiq.schemas.results import (
     RunProvenance,
     RunResult,
     MetricSweepValues,
+    Trajectory,
 )
 from musiq.schemas.model import RunStatus, RunIdentity, ModelRun, RunArtifacts
 
@@ -161,20 +168,62 @@ def _select_run_id(
     total_studies: int,
     tag: str | None,
 ) -> str | None:
-    candidate = format_study_id(solver_id, study, study_index, total_studies)
-    if sibling_count > 1:
-        profile_token = safe_study_token(
-            getattr(sample, "profile_id", None)
-            or reserved_run_id
-            or solver_id
-        )
-        candidate = f"{profile_token}__{candidate}"
-    
-    solver_runs = model.runs.get(solver_id, {})
-    if candidate not in solver_runs:
+    candidate = _compose_run_name(
+        model,
+        sample=sample,
+        solver_id=solver_id,
+        study=study,
+        study_index=study_index,
+        total_studies=total_studies,
+    )
+    existing_run = model.runs.get(candidate)
+    if existing_run is None:
         return candidate
-    
+    if existing_run is not None and not dict(getattr(existing_run, "results", {}) or {}):
+        return candidate
+
     return IDGenerator.next_run_id(model, tag=candidate)
+
+
+def _compose_run_name(
+    model: Any,
+    *,
+    sample: StudySample | None,
+    solver_id: str,
+    study: dict[str, Any],
+    study_index: int | None,
+    total_studies: int,
+) -> str:
+    config = getattr(model, "config", None)
+    num_circuits = len(getattr(config, "circuits", {}) or {}) if config is not None else 1
+    num_devices = len(getattr(config, "devices", {}) or {}) if config is not None else 1
+    num_pulses = len(getattr(config, "pulses", {}) or {}) if config is not None else 1
+    num_solvers = len(getattr(config, "solvers", {}) or {}) if config is not None else 1
+
+    parts: list[str] = []
+    if num_circuits > 1 and sample is not None and sample.circuit_id:
+        parts.append(str(sample.circuit_id))
+    if num_devices > 1 and sample is not None and sample.device_id:
+        parts.append(str(sample.device_id))
+    if num_pulses > 1 and sample is not None and sample.pulse_id:
+        parts.append(str(sample.pulse_id))
+    if num_solvers > 1:
+        parts.append(str(solver_id))
+
+    resolved_study_name = study.get("name") or study_name(study, study_index) or None
+    include_study = total_studies > 1 or (not parts and num_circuits <= 1)
+    if include_study and resolved_study_name:
+        parts.append(str(resolved_study_name))
+
+    if not parts:
+        if sample is not None and sample.circuit_id and str(sample.circuit_id) != "default":
+            parts.append(str(sample.circuit_id))
+        elif resolved_study_name:
+            parts.append(str(resolved_study_name))
+        else:
+            parts.append("default")
+
+    return "__".join(parts)
 
 
 def _extract_case_metric_terminal(metrics: dict[str, Any] | None, target_name: str) -> float:
@@ -221,7 +270,7 @@ def _extract_final_fidelity(run_result: Any) -> float:
     if theta is None:
         return 0.0
 
-    trajectory = next(iter(dict(getattr(run_result, "trajectories", {}) or {}).values()), None)
+    trajectory = _analysis_trajectory_from_run_result(run_result)
     if trajectory is None:
         return 0.0
 
@@ -241,13 +290,177 @@ def _extract_final_fidelity(run_result: Any) -> float:
         return 0.0
 
 
+def _snapshot_to_density_matrix(actual_kind: str, snapshot: Any) -> np.ndarray | None:
+    kind = str(actual_kind or "").strip().lower()
+    if kind == "density_matrix":
+        rows = [list(row) for row in list(snapshot or [])]
+        if not rows:
+            return None
+        return np.asarray(
+            [[complex_scalar(value) for value in row] for row in rows],
+            dtype=complex,
+        )
+    if kind == "wave_function":
+        vector = np.asarray([complex_scalar(value) for value in list(snapshot or [])], dtype=complex).reshape(-1)
+        if vector.size <= 0:
+            return None
+        return np.outer(vector, np.conjugate(vector))
+    return None
+
+
+def _average_quantum_trajectories(trajectories: list[Any]) -> Trajectory | None:
+    valid_trajectories = [trajectory for trajectory in trajectories if trajectory is not None]
+    if not valid_trajectories:
+        return None
+    if len(valid_trajectories) == 1:
+        return valid_trajectories[0]
+
+    density_runs: list[list[np.ndarray]] = []
+    min_length: int | None = None
+
+    for trajectory in valid_trajectories:
+        actual_kind, snapshots = quantum_state_series(trajectory)
+        if not snapshots:
+            continue
+        density_snapshots: list[np.ndarray] = []
+        for snapshot in snapshots:
+            rho = _snapshot_to_density_matrix(actual_kind, snapshot)
+            if rho is None:
+                density_snapshots = []
+                break
+            density_snapshots.append(rho)
+        if not density_snapshots:
+            continue
+        density_runs.append(density_snapshots)
+        current_length = len(density_snapshots)
+        min_length = current_length if min_length is None else min(min_length, current_length)
+
+    if not density_runs or not min_length:
+        return valid_trajectories[0]
+
+    averaged_snapshots: list[Any] = []
+    for snapshot_index in range(min_length):
+        averaged = sum(run[snapshot_index] for run in density_runs) / float(len(density_runs))
+        averaged_snapshots.append(averaged.tolist())
+
+    reference = valid_trajectories[0]
+    metadata = deepcopy(getattr(reference, "metadata", {}) or {})
+    metadata["ensemble_average"] = True
+    metadata["ensemble_size"] = len(density_runs)
+
+    return Trajectory(
+        schema_version=str(getattr(reference, "schema_version", "1.0")),
+        engine=str(getattr(reference, "engine", "unknown")),
+        times=list(getattr(reference, "times", []) or [])[:min_length],
+        density_matrix=averaged_snapshots,
+        classical=deepcopy(getattr(reference, "classical", {}) or {}),
+        measurements=deepcopy(getattr(reference, "measurements", {}) or {}),
+        metadata=metadata,
+    )
+
+
+def _analysis_trajectory_from_run_result(run_result: Any) -> Trajectory | Any | None:
+    trajectories = list(dict(getattr(run_result, "trajectories", {}) or {}).values())
+    return _average_quantum_trajectories(trajectories)
+
+
+def _payload_runs(payload: Any) -> list[list[Any]]:
+    if not isinstance(payload, dict):
+        return []
+    runs = payload.get("runs", None)
+    if not isinstance(runs, list):
+        return []
+    return [list(run) for run in runs if isinstance(run, list) and run]
+
+
+def _quantum_snapshots_for_storage(payload: Any, run_snapshots: list[Any] | None = None) -> Any:
+    if run_snapshots is not None:
+        return deepcopy(list(run_snapshots))
+    if payload is None:
+        return None
+    if isinstance(payload, dict):
+        return deepcopy(list(payload.get("snapshots", []) or []))
+    if isinstance(payload, list):
+        return deepcopy(list(payload))
+    return deepcopy(payload)
+
+
+def _normalize_trajectory_for_storage(trajectory: Any) -> Trajectory:
+    return Trajectory(
+        schema_version=str(getattr(trajectory, "schema_version", "1.0")),
+        engine=str(getattr(trajectory, "engine", "unknown")),
+        times=list(getattr(trajectory, "times", []) or []),
+        wave_function=_quantum_snapshots_for_storage(getattr(trajectory, "wave_function", None)),
+        density_matrix=_quantum_snapshots_for_storage(getattr(trajectory, "density_matrix", None)),
+        classical=deepcopy(getattr(trajectory, "classical", {}) or {}),
+        measurements=deepcopy(getattr(trajectory, "measurements", {}) or {}),
+        metadata=deepcopy(getattr(trajectory, "metadata", {}) or {}),
+    )
+
+
+def _expand_mcwf_shot_trajectories(trajectory: Any) -> list[Trajectory]:
+    wave_function = dict(getattr(trajectory, "wave_function", {}) or {})
+    density_matrix = dict(getattr(trajectory, "density_matrix", {}) or {})
+    wave_runs = _payload_runs(wave_function)
+    density_runs = _payload_runs(density_matrix)
+    run_count = max(len(wave_runs), len(density_runs))
+    if run_count <= 0:
+        return []
+
+    expanded: list[Trajectory] = []
+    base_metadata = dict(getattr(trajectory, "metadata", {}) or {})
+    for idx in range(run_count):
+        shot_metadata = deepcopy(base_metadata)
+        shot_metadata["trajectory_index"] = int(idx)
+        shot_metadata["num_trajectories"] = int(run_count)
+        if "mcwf_ntraj" not in shot_metadata:
+            shot_metadata["mcwf_ntraj"] = int(run_count)
+        expanded.append(
+            Trajectory(
+                schema_version=str(getattr(trajectory, "schema_version", "1.0")),
+                engine=str(getattr(trajectory, "engine", "unknown")),
+                times=list(getattr(trajectory, "times", []) or []),
+                wave_function=_quantum_snapshots_for_storage(
+                    getattr(trajectory, "wave_function", None),
+                    wave_runs[idx] if idx < len(wave_runs) else None,
+                ),
+                density_matrix=_quantum_snapshots_for_storage(
+                    getattr(trajectory, "density_matrix", None),
+                    density_runs[idx] if idx < len(density_runs) else None,
+                ),
+                classical=deepcopy(getattr(trajectory, "classical", {}) or {}),
+                measurements=deepcopy(getattr(trajectory, "measurements", {}) or {}),
+                metadata=shot_metadata,
+            )
+        )
+    return expanded
+
+
+def _build_result_trajectories(run_obj: Any, trajectory: Any) -> dict[int, Any]:
+    expanded = _expand_mcwf_shot_trajectories(trajectory)
+    if not expanded:
+        return {IDGenerator.next_shot_id(run_obj): _normalize_trajectory_for_storage(trajectory)}
+
+    existing = set()
+    for result in dict(getattr(run_obj, "results", {}) or {}).values():
+        existing.update(int(shot_id) for shot_id in dict(getattr(result, "trajectories", {}) or {}).keys())
+    trajectories: dict[int, Any] = {}
+    next_idx = 0
+    for shot_trajectory in expanded:
+        while next_idx in existing:
+            next_idx += 1
+        shot_id = next_idx
+        existing.add(shot_id)
+        trajectories[shot_id] = shot_trajectory
+        next_idx += 1
+    return trajectories
+
+
 def _requested_sweep_targets(analyser_payload: dict[str, Any] | None) -> list[str | dict[str, Any]]:
     payload = dict(analyser_payload or {})
-    targets = list(payload.get("sweep_metrics", []) or payload.get("parametric_metrics", []) or [])
+    targets: list[str | dict[str, Any]] = []
     targets.extend(collect_analysis_metrics(payload, level="PARAMETRIC"))
-    if targets:
-        return targets
-    return list(payload.get("case_metrics", []) or payload.get("metrics", []) or [])
+    return targets
 
 def run_one_solver_study(
     model: Any,
@@ -260,56 +473,26 @@ def run_one_solver_study(
     tag: str | None = None,
 ) -> list[str]:
     """Orchestrate compilation and execution for one study step across all applicable runs."""
-    # 1. Plan the expansion to find all compilation units (run_ids) that use this solver
-    plan = StudyPlanner.plan(model)
-    
-    # Find all run_ids in the plan that belong to this solver
-    target_run_ids = [
-        rid for rid, samples in plan.run_groups.items()
-        if samples and samples[0].solver_id == solver_id
-    ]
-    
-    if not target_run_ids:
-        raise RuntimeError(f"Could not resolve run_ids for solver {solver_id} from study plan")
+    groups = _prepare_solver_study_groups(
+        model,
+        solver_id=solver_id,
+        solver_cfg=solver_cfg,
+        study=study,
+        study_index=study_index,
+        total_studies=total_studies,
+        tag=tag,
+    )
 
-    # 2. Process each run group (e.g., different tasks using the same solver)
     produced_run_ids: list[str] = []
-    resolved_study_name = study.get("name") or study_name(study, study_index) or None
-    for reserved_run_id in target_run_ids:
-        sample = plan.run_groups[reserved_run_id][0]
-        run_id = _select_run_id(
-            model,
-            solver_id=solver_id,
-            sample=sample,
-            sibling_count=len(target_run_ids),
-            reserved_run_id=reserved_run_id,
-            study=study,
-            study_index=study_index,
-            total_studies=total_studies,
-            tag=tag,
-        ) or reserved_run_id
-
-        solver_runs = model.runs.setdefault(solver_id, {})
-        if run_id not in solver_runs:
-            solver_runs[run_id] = execute_compilation_unit(
-                model,
-                sample,
-                solver_cfg_override=clone_solver_cfg_with_single_study(solver_cfg, study=study),
-                run_id=run_id,
-                tag=tag,
-            )
-
-        run_obj = solver_runs[run_id]
-        run_obj.identity.run_id = run_id
-        run_obj.identity.study_index = study_index
-        run_obj.identity.study_name = resolved_study_name
-
-        for sample in plan.run_groups[reserved_run_id]:
+    for group in groups:
+        run_obj = group["run_obj"]
+        run_obj.status = RunStatus.RUNNING
+        for sample in group["samples"]:
             run_sample(model, run_obj, sample)
 
         run_obj.status = RunStatus.COMPLETED
         run_obj.finished_at = time.time()
-        produced_run_ids.append(run_id)
+        produced_run_ids.append(str(group["run_id"]))
 
     return produced_run_ids
 
@@ -332,17 +515,99 @@ def clone_solver_cfg_with_single_study(
         study=[dict(study)] if study else None,
     )
 
+
+def _prepare_solver_study_groups(
+    model: Any,
+    *,
+    solver_id: str,
+    solver_cfg: SolverConfig,
+    study: dict[str, Any],
+    study_index: int | None,
+    total_studies: int,
+    tag: str | None = None,
+) -> list[dict[str, Any]]:
+    """Ensure compilation units exist for one study and return their sample groups."""
+    plan = StudyPlanner.plan(model)
+
+    target_run_ids = [
+        rid for rid, samples in plan.run_groups.items()
+        if samples and samples[0].solver_id == solver_id
+    ]
+    if not target_run_ids:
+        raise RuntimeError(f"Could not resolve run_ids for solver {solver_id} from study plan")
+
+    resolved_study_name = study.get("name") or study_name(study, study_index) or None
+    groups: list[dict[str, Any]] = []
+
+    for reserved_run_id in target_run_ids:
+        samples = list(plan.run_groups[reserved_run_id])
+        sample = samples[0]
+        run_id = _select_run_id(
+            model,
+            solver_id=solver_id,
+            sample=sample,
+            sibling_count=len(target_run_ids),
+            reserved_run_id=reserved_run_id,
+            study=study,
+            study_index=study_index,
+            total_studies=total_studies,
+            tag=tag,
+        ) or reserved_run_id
+
+        if run_id not in model.runs:
+            model.runs[run_id] = execute_compilation_unit(
+                model,
+                sample,
+                solver_cfg_override=clone_solver_cfg_with_single_study(solver_cfg, study=study),
+                run_id=run_id,
+                tag=tag,
+            )
+
+        run_obj = model.runs[run_id]
+        run_obj.identity.run_id = run_id
+        run_obj.identity.profile_id = getattr(sample, "profile_id", None)
+        run_obj.identity.circuit_id = getattr(sample, "circuit_id", None)
+        run_obj.identity.device_id = getattr(sample, "device_id", None)
+        run_obj.identity.pulse_id = getattr(sample, "pulse_id", None)
+        run_obj.identity.study_index = study_index
+        run_obj.identity.study_name = resolved_study_name
+        groups.append({"run_id": run_id, "run_obj": run_obj, "samples": samples})
+
+    return groups
+
+
+def build_one_solver_study(
+    model: Any,
+    *,
+    solver_id: str,
+    solver_cfg: SolverConfig,
+    study: dict[str, Any],
+    study_index: int | None,
+    total_studies: int,
+    tag: str | None = None,
+) -> list[str]:
+    """Compile one study step and store build artifacts without running the engine."""
+    groups = _prepare_solver_study_groups(
+        model,
+        solver_id=solver_id,
+        solver_cfg=solver_cfg,
+        study=study,
+        study_index=study_index,
+        total_studies=total_studies,
+        tag=tag,
+    )
+    return [str(group["run_id"]) for group in groups]
+
 def find_run_id(
     model: Any,
     *,
     solver_id: str,
     study_name_val: str | None = None,
 ) -> str | None:
-    solver_runs = model.runs.get(solver_id, {})
     candidates = [
         (run_id, run_obj)
-        for run_id, run_obj in solver_runs.items()
-        if run_obj.results
+        for run_id, run_obj in model.runs.items()
+        if str(run_obj.identity.solver_id) == str(solver_id) and run_obj.results
     ]
     if study_name_val is None:
         if len(candidates) == 1:
@@ -557,11 +822,15 @@ def execute_compilation_unit(
         identity=RunIdentity(
             run_id=run_id,
             solver_id=sample.solver_id,
+            circuit_id=sample.circuit_id,
+            device_id=sample.device_id,
+            pulse_id=sample.pulse_id,
+            profile_id=getattr(sample, "profile_id", None),
             study_name=None, # Handled by samples/results
             study_index=None,
         ),
         runtime_task=task,
-        status=RunStatus.RUNNING,
+        status=RunStatus.PENDING,
         started_at=time.time(),
         artifacts=RunArtifacts(
             circuit=parsed['circuit'],
@@ -698,8 +967,7 @@ def run_sample(
             study_name=run_obj.identity.study_name,
             study_index=run_obj.identity.study_index,
         ),
-        # Use auto-incrementing shot_id
-        trajectories={IDGenerator.next_shot_id(run_obj): trajectory},
+        trajectories=_build_result_trajectories(run_obj, trajectory),
         runtime_metadata={
             'engine_used': trajectory.engine,
             'param_id': param_id,
@@ -755,10 +1023,79 @@ def run_study(
         tag=tag,
     )
 
-def run_solver(model: Any, solver_id: str | None = None, tag: str | None = None) -> list[str]:
+
+def build_study(
+    model: Any,
+    *,
+    solver_id: str | None = None,
+    study_name_val: str | None = None,
+    study_index: int | None = None,
+    tag: str | None = None,
+) -> list[str]:
     selected_solver_id = require_solver_id(model, solver_id)
     solver_cfg = model.solvers[selected_solver_id].config
-    
+    entries = get_study_entries(solver_cfg)
+    chosen_index: int | None = None
+    chosen_study: dict[str, Any] | None = None
+    if study_name_val is not None:
+        wanted = str(study_name_val).strip()
+        for idx, step in entries:
+            if str(study_name(step, idx) or '').strip() == wanted:
+                chosen_index = idx
+                chosen_study = dict(step)
+                break
+        if chosen_study is None:
+            raise KeyError(f'Unknown study `{wanted}` for solver `{selected_solver_id}`.')
+    elif study_index is not None:
+        for idx, step in entries:
+            if idx == study_index:
+                chosen_index = idx
+                chosen_study = dict(step)
+                break
+        if chosen_study is None:
+            raise IndexError(f'Unknown study index `{study_index}` for solver `{selected_solver_id}`.')
+    else:
+        if len(entries) != 1:
+            raise ValueError(f'study_name or study_index is required for solver `{selected_solver_id}` with multiple study steps.')
+        chosen_index, chosen_study = entries[0]
+    assert chosen_study is not None
+    return build_one_solver_study(
+        model,
+        solver_id=selected_solver_id,
+        solver_cfg=solver_cfg,
+        study=chosen_study,
+        study_index=chosen_index,
+        total_studies=len(entries),
+        tag=tag,
+    )
+
+
+def build_solver(model: Any, solver_id: str | None = None, tag: str | None = None) -> list[str]:
+    selected_solver_id = require_solver_id(model, solver_id)
+    solver_cfg = model.solvers[selected_solver_id].config
+
+    entries = get_study_entries(solver_cfg)
+    all_run_ids = []
+    for idx, step in entries:
+        rids = build_one_solver_study(
+            model,
+            solver_id=selected_solver_id,
+            solver_cfg=solver_cfg,
+            study=dict(step),
+            study_index=idx,
+            total_studies=len(entries),
+            tag=tag,
+        )
+        all_run_ids.extend(rids)
+    return all_run_ids
+
+
+def run_engine(model: Any, solver_id: str | None = None, tag: str | None = None) -> list[str]:
+    """Run the numerical engine for a solver, auto-building missing artifacts first."""
+    selected_solver_id = require_solver_id(model, solver_id)
+    build_solver(model, solver_id=selected_solver_id, tag=tag)
+    solver_cfg = model.solvers[selected_solver_id].config
+
     entries = get_study_entries(solver_cfg)
     all_run_ids = []
     for idx, step in entries:
@@ -774,6 +1111,9 @@ def run_solver(model: Any, solver_id: str | None = None, tag: str | None = None)
         all_run_ids.extend(rids)
     return all_run_ids
 
+def run_solver(model: Any, solver_id: str | None = None, tag: str | None = None) -> list[str]:
+    return run_engine(model, solver_id=solver_id, tag=tag)
+
 def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: str | None = None, tag: str | None = None, run_ids: list[str] | None = None) -> None:
     selected_analyser_id = require_analyser_id(model, analyser_id)
     analyser_cfg_obj = model.analysers[selected_analyser_id]
@@ -782,8 +1122,8 @@ def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: 
     
     matching_runs = [
         (run_id, run_obj)
-        for run_id, run_obj in model.runs.get(selected_solver_id, {}).items()
-        if (
+        for run_id, run_obj in model.runs.items()
+        if str(run_obj.identity.solver_id) == selected_solver_id and (
             run_obj.results 
             and any(res.trajectories for res in run_obj.results.values())
         )
@@ -818,12 +1158,14 @@ def run_analysis(model: Any, *, analyser_id: str | None = None, study_name_val: 
         pulse_cfg = build_effective_pulse_config(model.device, model.pulse)
         
         for param_id, run_result in solver_run.results.items():
-            trajectory = next(iter(run_result.trajectories.values()), None)
+            trajectories = list(dict(getattr(run_result, "trajectories", {}) or {}).values())
+            trajectory = trajectories[0] if trajectories else None
             if trajectory is None:
                 continue
 
             analyzed = run_analysis_stage(
                 trajectory=trajectory,
+                trajectories=trajectories,
                 model_spec=solver_run.artifacts.model_spec,
                 pulse_ir=solver_run.artifacts.pulse_ir,
                 pulse_cfg=pulse_cfg,
@@ -1007,11 +1349,10 @@ def run_profile(model: Any, profile_id: str, tag: str | None = None) -> None:
     try:
         # Isolate target profile so StudyPlanner only generates samples for it
         model.config.profiles = {profile_id: p_wrapper.config}
-        
-        # Run the solver associated with this profile
-        run_ids = p_wrapper.run_solver(tag=tag)
-        
-        # Trigger analysis for the results produced
+
+        # Build, run the engine, then trigger analysis for the results produced.
+        p_wrapper.build_solver(tag=tag)
+        run_ids = p_wrapper.run_engine(tag=tag)
         p_wrapper.run_analysis(tag=tag, run_ids=run_ids)
         
     finally:

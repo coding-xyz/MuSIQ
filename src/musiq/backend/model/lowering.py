@@ -256,15 +256,11 @@ def composite_quantum_projection(hw: DeviceConfig) -> QuantumProjection:
         comp_type = comp.type.strip().lower()
         basis = dict(comp.basis)
         parameters = dict(comp.parameters)
-        local_noise = dict(comp.noise)
         if comp_type == "transmon":
             q_payload: dict[str, Any] = {
                 "freq_Hz": float(parameters.get("freq_Hz", 0.0)),
                 "anharmonicity_Hz": float(parameters.get("anharmonicity_Hz", -2.0e8)),
             }
-            for key in ("T1_s", "T2_s", "Tphi_s", "Tup_s", "gamma1_Hz", "gamma_phi_Hz", "gamma_up_Hz"):
-                if key in local_noise:
-                    q_payload[key] = local_noise[key]
             qubits.append(q_payload)
             if str(basis.get("kind", "")).strip().lower() == "nlevel":
                 transmon_levels = max(transmon_levels, int(basis.get("levels", 2) or 2))

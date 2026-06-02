@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import numpy as np
 from musiq.analysis.registry import MetricRegistry
 from musiq.common.schemas import ModelSpec, Trajectory
 from musiq.schemas.results import MetricSeries, Observables, Report
@@ -52,10 +53,8 @@ def build_default_metric_registry() -> MetricRegistry:
 DEFAULT_METRIC_REGISTRY = build_default_metric_registry()
 
 def _required_case_metrics(cfg: dict[str, Any]) -> list[str | dict[str, Any]]:
-    requested_case = list(cfg.get("case_metrics", []) or cfg.get("metrics", []) or [])
-    requested_case.extend(collect_analysis_metrics(cfg, level="CASE", metric_source="registry"))
-    requested_sweep = list(cfg.get("sweep_metrics", []) or cfg.get("parametric_metrics", []) or [])
-    requested_sweep.extend(collect_analysis_metrics(cfg, level="PARAMETRIC"))
+    requested_case = list(collect_analysis_metrics(cfg, level="CASE", metric_source="registry"))
+    requested_sweep = list(collect_analysis_metrics(cfg, level="PARAMETRIC"))
     normalized_case: list[str | dict[str, Any]] = []
     seen_case_names: set[str] = set()
 
@@ -70,13 +69,17 @@ def _required_case_metrics(cfg: dict[str, Any]) -> list[str | dict[str, Any]]:
             return
         lowered = name.lower()
         if lowered.startswith("final_p"):
-            canonical = "final_population"
+            canonical = "population"
         elif lowered == "final_leakage":
-            canonical = "final_leakage"
+            canonical = "leakage"
         elif lowered == "final_coherence_01":
-            canonical = "final_coherence_01"
+            canonical = "coherence_01"
+        elif lowered == "final_fidelity":
+            canonical = ""
         else:
             canonical = name
+        if not canonical:
+            return
         key = canonical.lower()
         if key in seen_case_names:
             return
@@ -95,6 +98,7 @@ def resolve_metrics_payload(
     analyser_cfg: dict[str, Any] | None,
     *,
     registry: MetricRegistry | None = None,
+    trajectories: list[Trajectory] | None = None,
 ) -> tuple[dict[str, MetricSeries], Observables, Report]:
     cfg = analyser_cfg or {}
     requested_metrics = _required_case_metrics(cfg)
@@ -122,9 +126,21 @@ def resolve_metrics_payload(
             key = name.lower()
             if metric_registry.has(key):
                 entry = metric_registry.get(key)
-                # Handle both per-trajectory and per-run metrics
-                # For now, we pass trajectory; the comprehensive metrics 
-                # will need to be called differently by the dispatcher if they need ALL trajectories.
+                trajectory_list = [traj for traj in list(trajectories or []) if traj is not None]
+                if len(trajectory_list) > 1:
+                    aggregated_items, observable_updates = _resolve_multi_trajectory_metric(
+                        name=name,
+                        entry=entry.callable_obj,
+                        trajectories=trajectory_list,
+                        model_spec=model_spec,
+                        metric_cfg=metric_cfg,
+                        observable_values=observable_values,
+                    )
+                    metric_items.update(aggregated_items)
+                    for obs_name, obs_value in observable_updates.items():
+                        observable_values[str(obs_name)] = float(obs_value)
+                    continue
+
                 result = entry.callable_obj(
                     trajectory,
                     model_spec,
@@ -142,7 +158,7 @@ def resolve_metrics_payload(
                         metric_items[name] = MetricSeries(values=[val])
                     except (TypeError, ValueError):
                         pass
-                
+
                 for obs_name, obs_value in dict(result.get("observable_updates", {}) or {}).items():
                     observable_values[str(obs_name)] = float(obs_value)
                 continue
@@ -172,6 +188,93 @@ def resolve_metrics_payload(
         error_budget=error_budget,
     )
     return metric_items, Observables(values=observable_values), report
+
+
+def _resolve_multi_trajectory_metric(
+    *,
+    name: str,
+    entry,
+    trajectories: list[Trajectory],
+    model_spec: ModelSpec,
+    metric_cfg: dict[str, Any],
+    observable_values: dict[str, float],
+) -> tuple[dict[str, MetricSeries], dict[str, float]]:
+    payloads: list[dict[str, MetricSeries]] = []
+    observable_updates_acc: dict[str, list[float]] = {}
+
+    for trajectory in trajectories:
+        result = entry(
+            trajectory,
+            model_spec,
+            metric_cfg,
+            {"observable_values": dict(observable_values)},
+        )
+        payload = result.get("payload")
+        if isinstance(payload, dict) and all(isinstance(v, MetricSeries) for v in payload.values()):
+            payloads.append(payload)
+        elif isinstance(payload, MetricSeries):
+            payloads.append({name: payload})
+        for obs_name, obs_value in dict(result.get("observable_updates", {}) or {}).items():
+            observable_updates_acc.setdefault(str(obs_name), []).append(float(obs_value))
+
+    if not payloads:
+        return {}, {}
+
+    aggregated_items: dict[str, MetricSeries] = {}
+    payload_keys = list(payloads[0].keys())
+    for payload_key in payload_keys:
+        series_list = [payload[payload_key] for payload in payloads if payload_key in payload]
+        if not series_list:
+            continue
+        mean_series, std_series = _aggregate_metric_series(series_list)
+        aggregated_items[f"{payload_key}_mean"] = mean_series
+        aggregated_items[f"{payload_key}_std"] = std_series
+
+    observable_updates = {
+        obs_name: float(np.mean(values))
+        for obs_name, values in observable_updates_acc.items()
+        if values
+    }
+    return aggregated_items, observable_updates
+
+
+def _aggregate_metric_series(series_list: list[MetricSeries]) -> tuple[MetricSeries, MetricSeries]:
+    reference = series_list[0]
+    mean_values, std_values = _aggregate_metric_values([series.values for series in series_list])
+    return (
+        MetricSeries(times=list(reference.times), values=mean_values),
+        MetricSeries(times=list(reference.times), values=std_values),
+    )
+
+
+def _aggregate_metric_values(values_list: list[list[float] | dict[str, list[float]]]) -> tuple[list[float] | dict[str, list[float]], list[float] | dict[str, list[float]]]:
+    first = values_list[0]
+    if isinstance(first, dict):
+        keys = list(first.keys())
+        mean_map: dict[str, list[float]] = {}
+        std_map: dict[str, list[float]] = {}
+        for key in keys:
+            stacked = [np.asarray(list(values.get(key, []) or []), dtype=float) for values in values_list if isinstance(values, dict)]
+            if not stacked:
+                continue
+            min_len = min(arr.size for arr in stacked)
+            if min_len <= 0:
+                mean_map[key] = []
+                std_map[key] = []
+                continue
+            data = np.stack([arr[:min_len] for arr in stacked], axis=0)
+            mean_map[key] = np.mean(data, axis=0).tolist()
+            std_map[key] = np.std(data, axis=0).tolist()
+        return mean_map, std_map
+
+    stacked = [np.asarray(list(values or []), dtype=float) for values in values_list if isinstance(values, list)]
+    if not stacked:
+        return [], []
+    min_len = min(arr.size for arr in stacked)
+    if min_len <= 0:
+        return [], []
+    data = np.stack([arr[:min_len] for arr in stacked], axis=0)
+    return np.mean(data, axis=0).tolist(), np.std(data, axis=0).tolist()
 
 __all__ = [
     "DEFAULT_METRIC_REGISTRY",

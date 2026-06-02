@@ -1,15 +1,12 @@
-schema_version: "3.0"
-circuit:
-  name: "echo_1overf"
-  description: "Spin Echo experiment for 1/f noise decoherence"
-  qasm_text: |
-    OPENQASM 3;
-    include "stdgates.inc";
-    qubit[1] q;
-    bit[1] c;
-    ry(1.5707963267948966) q[0];
-    id q[0];
-    x q[0];
-    id q[0];
-    ry(1.5707963267948966) q[0];
-    measure q[0] -> c[0];
+schema_version: "1.0"
+qasm_text: |
+  OPENQASM 3;
+  include "stdgates.inc";
+  qubit[1] q;
+  bit[1] c;
+  ry(1.5707963267948966) q[0];
+  id q[0];
+  x q[0];
+  id q[0];
+  ry(1.5707963267948966) q[0];
+  measure q[0] -> c[0];
