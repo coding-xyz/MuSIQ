@@ -135,6 +135,52 @@ class CircuitConfig:
     circuit_ir: CircuitIR | None = None
     param_bindings: dict[str, float] | None = None
 
+    @classmethod
+    def from_schedule_payload(
+        cls,
+        schedule_or_payload: dict[str, Any],
+        *,
+        num_qubits: int | None = None,
+        num_clbits: int | None = None,
+        schema_version: str = "1.0",
+        format: str = "circuit_layer_yaml",
+        param_bindings: dict[str, float] | None = None,
+    ) -> "CircuitConfig":
+        """Build a circuit config from a legacy schedule payload."""
+        from musiq.workflow.task_io import circuit_from_schedule_payload
+
+        return circuit_from_schedule_payload(
+            schedule_or_payload,
+            num_qubits=num_qubits,
+            num_clbits=num_clbits,
+            schema_version=schema_version,
+            format=format,
+            param_bindings=param_bindings,
+        )
+
+    @classmethod
+    def from_schedule_file(
+        cls,
+        path: str | Path,
+        *,
+        num_qubits: int | None = None,
+        num_clbits: int | None = None,
+        schema_version: str = "1.0",
+        format: str = "circuit_layer_yaml",
+        param_bindings: dict[str, float] | None = None,
+    ) -> "CircuitConfig":
+        """Load a legacy schedule circuit file into a circuit config."""
+        from musiq.workflow.task_io import load_circuit_schedule_file
+
+        return load_circuit_schedule_file(
+            path,
+            num_qubits=num_qubits,
+            num_clbits=num_clbits,
+            schema_version=schema_version,
+            format=format,
+            param_bindings=param_bindings,
+        )
+
 
 @dataclass(slots=True)
 class ProfileConfig:

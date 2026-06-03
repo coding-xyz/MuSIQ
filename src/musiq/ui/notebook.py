@@ -10,7 +10,18 @@ import time
 import numpy as np
 import yaml
 
-from musiq.pulse.visualize import plot_pulses, plot_report, plot_trajectory
+from musiq.visualization import (
+    density_snapshots,
+    final_level_population_table,
+    integrated_heterodyne_iq,
+    integrated_iq_mean_error,
+    make_pulse_figure,
+    make_report_figure,
+    make_trajectory_figure,
+    plot_iq_cloud,
+    plot_iq_clouds,
+    qubit_level_populations,
+)
 from musiq.workflow.model import Model, create_model
 
 
@@ -43,9 +54,9 @@ def plot_default(model: Model) -> dict[str, object]:
         report_payload = dict(getattr(analysis.output, "report", {}) or {})
 
     return {
-        "pulses": plot_pulses(bundle.artifacts.pulse_ir) if bundle.artifacts and bundle.artifacts.pulse_ir is not None else None,
-        "trajectory": plot_trajectory(trajectory),
-        "report": plot_report(report_payload),
+        "pulses": make_pulse_figure(bundle.artifacts.pulse_ir) if bundle.artifacts and bundle.artifacts.pulse_ir is not None else None,
+        "trajectory": make_trajectory_figure(trajectory),
+        "report": make_report_figure(report_payload),
     }
 
 
@@ -246,155 +257,6 @@ def run_pulse_sweep(
             )
         )
     return cases
-
-
-def density_snapshots(source: Any) -> np.ndarray:
-    """Return density-matrix snapshots from a musiq case or trajectory."""
-    trajectory = source.get("trajectory") if isinstance(source, dict) else source
-    density_matrix = getattr(trajectory, "density_matrix", None)
-    if isinstance(density_matrix, dict):
-        return np.asarray(density_matrix.get("snapshots", []) or [], dtype=complex)
-    return np.asarray(density_matrix or [], dtype=complex)
-
-
-def _case_model_spec(case: dict[str, Any]):
-    _, run_obj = next(_iter_model_runs(case["model"]))
-    return run_obj.artifacts.model_spec
-
-
-def qubit_level_populations(case: dict[str, Any], *, normalize: bool = True) -> np.ndarray:
-    """Return transmon-level populations from density matrices in a musiq case."""
-    rho = density_snapshots(case)
-    if rho.size == 0:
-        return np.zeros((0, 0), dtype=float)
-    model_spec = _case_model_spec(case)
-    levels = int(model_spec.system.transmon_levels or 2)
-    cavity_dim = int(model_spec.system.cavity_nmax or 0) + 1
-    pops = np.zeros((rho.shape[0], levels), dtype=float)
-    for t_idx, mat in enumerate(rho):
-        for c in range(cavity_dim):
-            for level in range(levels):
-                idx = c * levels + level
-                if idx < mat.shape[0]:
-                    pops[t_idx, level] += float(np.real(mat[idx, idx]))
-    pops = np.clip(pops, 0.0, None)
-    if normalize:
-        norm = pops.sum(axis=1, keepdims=True)
-        pops = np.divide(pops, norm, out=np.zeros_like(pops), where=norm > 0.0)
-    return pops
-
-
-def final_level_population_table(cases: list[dict[str, Any]]) -> np.ndarray:
-    """Return one row of final level populations for each musiq case."""
-    rows = []
-    width = 0
-    for case in cases:
-        pops = qubit_level_populations(case)
-        row = pops[-1] if pops.size else np.asarray([], dtype=float)
-        width = max(width, int(row.size))
-        rows.append(row)
-    if width == 0:
-        return np.zeros((len(rows), 0), dtype=float)
-    return np.asarray([np.pad(row, (0, width - row.size), constant_values=np.nan) for row in rows], dtype=float)
-
-
-def integrated_heterodyne_iq(case: dict[str, Any]) -> np.ndarray:
-    """Integrate per-shot heterodyne I/Q records over the readout window."""
-    trajectory = case["trajectory"]
-    times = np.asarray(trajectory.times, dtype=float)
-    records = list((trajectory.measurements or {}).get("records", []) or [])
-    if times.size == 0 or not records:
-        return np.zeros((0, 2), dtype=float)
-
-    readout = dict((trajectory.classical or {}).get("readout", {}) or {})
-    windows = list(readout.get("measurement_windows", []) or readout.get("readout_windows", []) or [])
-    if windows:
-        t0 = float(windows[-1].get("t0_s", times[0]))
-        t1 = float(windows[-1].get("t1_s", times[-1]))
-    else:
-        t0 = float(times[int(0.55 * max(len(times) - 1, 0))])
-        t1 = float(times[-1])
-    mask = (times >= t0) & (times <= t1)
-
-    points = []
-    for record in records:
-        i_vals = np.asarray(record.get("heterodyne_I", []), dtype=float)
-        q_vals = np.asarray(record.get("heterodyne_Q", []), dtype=float)
-        if i_vals.size != times.size or q_vals.size != times.size or not np.any(mask):
-            continue
-        duration = max(float(times[mask][-1] - times[mask][0]), np.finfo(float).eps)
-        integrate = getattr(np, "trapezoid", None)
-        if integrate is None:
-            integrate = getattr(np, "trapz")
-        points.append([integrate(i_vals[mask], times[mask]) / duration, integrate(q_vals[mask], times[mask]) / duration])
-    return np.asarray(points, dtype=float)
-
-
-def integrated_iq_mean_error(cases: list[dict[str, Any]], *, error: str = "sem") -> dict[str, np.ndarray]:
-    """Return per-case integrated I/Q mean and error bars from shot records."""
-    means = []
-    errors = []
-    stds = []
-    counts = []
-    for case in cases:
-        points = integrated_heterodyne_iq(case)
-        counts.append(int(points.shape[0]))
-        if points.size == 0:
-            means.append([np.nan, np.nan])
-            errors.append([np.nan, np.nan])
-            stds.append([np.nan, np.nan])
-            continue
-        mean = np.nanmean(points, axis=0)
-        std = np.nanstd(points, axis=0, ddof=1) if points.shape[0] > 1 else np.zeros(2, dtype=float)
-        if error == "std":
-            err = std
-        elif error == "sem":
-            err = std / max(float(np.sqrt(points.shape[0])), 1.0)
-        else:
-            raise ValueError("error must be 'sem' or 'std'")
-        means.append(mean)
-        errors.append(err)
-        stds.append(std)
-    return {
-        "mean": np.asarray(means, dtype=float),
-        "error": np.asarray(errors, dtype=float),
-        "std": np.asarray(stds, dtype=float),
-        "n": np.asarray(counts, dtype=int),
-    }
-
-
-def plot_iq_cloud(ax, case: dict[str, Any], title: str | None = None) -> None:
-    """Plot integrated heterodyne I/Q points for one musiq case."""
-    points = integrated_heterodyne_iq(case)
-    if points.size:
-        ax.scatter(points[:, 0], points[:, 1], s=24, alpha=0.72)
-        ax.scatter([points[:, 0].mean()], [points[:, 1].mean()], marker="x", s=90, color="black")
-    ax.set_title(title or str(case.get("label", "")))
-    ax.set_xlabel("integrated I")
-    ax.set_ylabel("integrated Q")
-    ax.axis("equal")
-
-
-def plot_iq_clouds(ax, cases: list[dict[str, Any]], title: str | None = None) -> None:
-    """Plot multiple integrated heterodyne I/Q clouds on one axis."""
-    for case in cases:
-        points = integrated_heterodyne_iq(case)
-        label = str(case.get("label", ""))
-        if not points.size:
-            continue
-        # ``Axes._get_lines.prop_cycler`` is not available in some matplotlib versions.
-        # Prefer the stable helper and keep a safe fallback.
-        if hasattr(ax._get_lines, "get_next_color"):
-            color = ax._get_lines.get_next_color()
-        else:
-            color = None
-        ax.scatter(points[:, 0], points[:, 1], s=20, alpha=0.45, color=color, label=label)
-        ax.scatter([points[:, 0].mean()], [points[:, 1].mean()], marker="x", s=90, color=color)
-    ax.set_title(title or "Integrated I/Q clouds")
-    ax.set_xlabel("integrated I")
-    ax.set_ylabel("integrated Q")
-    ax.axis("equal")
-    ax.legend()
 
 
 __all__ = [

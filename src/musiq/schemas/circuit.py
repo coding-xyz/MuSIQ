@@ -40,6 +40,28 @@ def _copy_gate(gate: CircuitGate | dict[str, Any]) -> CircuitGate:
     )
 
 
+def _infer_schedule_dimensions(
+    schedule: dict[int, list[list[CircuitGate]]] | None,
+) -> tuple[int, int]:
+    """Infer minimal qubit/classical-bit counts from a scheduled circuit."""
+    max_lane_count = 0
+    max_qubit_index = -1
+    max_clbit_index = -1
+    for raw_lanes in dict(schedule or {}).values():
+        lanes = list(raw_lanes or [])
+        max_lane_count = max(max_lane_count, len(lanes))
+        for lane in lanes:
+            for gate in list(lane or []):
+                copied = _copy_gate(gate)
+                if copied.qubits:
+                    max_qubit_index = max(max_qubit_index, max(copied.qubits))
+                if copied.clbits:
+                    max_clbit_index = max(max_clbit_index, max(copied.clbits))
+    inferred_qubits = max(max_lane_count, max_qubit_index + 1 if max_qubit_index >= 0 else 0)
+    inferred_clbits = max_clbit_index + 1 if max_clbit_index >= 0 else 0
+    return inferred_qubits, inferred_clbits
+
+
 def build_serial_schedule(
     gates: list[CircuitGate] | None,
     *,
@@ -127,6 +149,9 @@ class CircuitIR:
     source_qasm: str = ""
 
     def __post_init__(self) -> None:
+        inferred_qubits, inferred_clbits = _infer_schedule_dimensions(self.schedule)
+        self.num_qubits = max(int(self.num_qubits or 0), int(inferred_qubits))
+        self.num_clbits = max(int(self.num_clbits or 0), int(inferred_clbits))
         normalized: dict[int, list[list[CircuitGate]]] = {}
         for raw_tick, raw_lanes in sorted(dict(self.schedule or {}).items(), key=lambda item: int(item[0])):
             tick = int(raw_tick)

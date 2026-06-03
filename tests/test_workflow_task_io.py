@@ -152,7 +152,7 @@ def test_circuit_config_requires_exactly_one_qasm_source(tmp_path: Path):
         load_circuit_config_file(none_path)
 
 
-def test_load_circuit_config_file_rejects_legacy_schedule_payload(tmp_path: Path):
+def test_load_circuit_config_file_accepts_legacy_schedule_payload(tmp_path: Path):
     cfg = {
         "schema_version": "1.0",
         "format": "circuit_layer_yaml",
@@ -162,8 +162,31 @@ def test_load_circuit_config_file_rejects_legacy_schedule_payload(tmp_path: Path
     cfg_path = tmp_path / "circuit_schedule.yaml"
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Unsupported keys in circuit top-level"):
-        load_circuit_config_file(cfg_path)
+    circuit = load_circuit_config_file(cfg_path)
+
+    assert circuit.qasm_text is None
+    assert circuit.circuit_ir is not None
+    assert circuit.circuit_ir.format == "circuit_layer_yaml"
+    assert circuit.circuit_ir.num_qubits == 2
+    assert circuit.circuit_ir.schedule[0][0][0].name == "sx"
+
+
+def test_circuit_config_from_schedule_file_accepts_legacy_schedule_payload(tmp_path: Path):
+    cfg = {
+        "schema_version": "1.0",
+        "format": "circuit_layer_yaml",
+        "num_qubits": 1,
+        "schedule": {"0": [[["sx", [0]]]]},
+    }
+    cfg_path = tmp_path / "circuit_schedule.yaml"
+    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+
+    circuit = CircuitConfig.from_schedule_file(cfg_path)
+
+    assert circuit.qasm_text is None
+    assert circuit.circuit_ir is not None
+    assert circuit.circuit_ir.num_qubits == 1
+    assert circuit.circuit_ir.schedule[0][0][0].name == "sx"
 
 
 def test_load_circuit_config_file_rejects_legacy_nested_circuit_payload(tmp_path: Path):
@@ -475,6 +498,29 @@ def test_create_model_accepts_direct_circuit_config_object(tmp_path: Path):
     assert "default" in model.config.circuits
     assert model.config.circuits["default"].qasm_text == "OPENQASM 3; qubit[1] q; x q[0];"
     assert len(model.runs) == 1
+
+
+def test_create_model_infers_num_qubits_for_scheduled_circuit_input(tmp_path: Path):
+    solver_path, device_path, pulse_path, analyser_path = _write_basic_solver_device_pulse_and_analyser(tmp_path)
+    scheduled_circuit = CircuitConfig.from_schedule_payload(
+        {
+            "0": [
+                [["sx", [0]]],
+                [["sx", [1]]],
+            ]
+        }
+    )
+
+    model = create_model(
+        circuits=scheduled_circuit,
+        solvers=solver_path,
+        devices=device_path,
+        pulses=pulse_path,
+        analysers=analyser_path,
+    )
+
+    assert model.config.circuits["default"].circuit_ir is not None
+    assert model.config.circuits["default"].circuit_ir.num_qubits == 2
 
 
 def test_create_model_accepts_named_resource_dicts_and_builds_profiles(tmp_path: Path):

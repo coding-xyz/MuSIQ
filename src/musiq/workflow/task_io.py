@@ -11,6 +11,7 @@ import yaml
 
 from musiq.backend.config import validate_backend_config
 from musiq.pulse.catalog import validate_typed_pulse_schema
+from musiq.schemas.circuit import CircuitGate, CircuitIR
 from musiq.schemas.utils import ParameterSweepConfig, ParameterList
 from musiq.workflow.contracts import (
     AnalyserTrajectoryConfig,
@@ -251,8 +252,116 @@ def _validate_pulse_payload(payload: dict[str, Any]) -> None:
         raise ValueError("Pulse config `pulse` must be a mapping.")
 
 
+def _is_legacy_schedule_circuit_payload(payload: dict[str, Any]) -> bool:
+    return "schedule" in payload and any(key in payload for key in ("format", "num_qubits", "num_clbits"))
+
+
+def _legacy_gate_to_ir(raw_gate: Any) -> CircuitGate:
+    if isinstance(raw_gate, CircuitGate):
+        return raw_gate
+    if isinstance(raw_gate, dict):
+        return CircuitGate(
+            name=str(raw_gate.get("name", "")),
+            qubits=[int(q) for q in list(raw_gate.get("qubits", []) or [])],
+            params=[float(p) for p in list(raw_gate.get("params", []) or [])],
+            clbits=[int(c) for c in list(raw_gate.get("clbits", []) or [])],
+        )
+    if isinstance(raw_gate, (list, tuple)):
+        parts = list(raw_gate)
+        if not parts:
+            raise ValueError("Legacy circuit gate entry must not be empty.")
+        name = str(parts[0])
+        qubits = [int(q) for q in list(parts[1] if len(parts) > 1 else [])]
+        params = [float(p) for p in list(parts[2:])]
+        return CircuitGate(name=name, qubits=qubits, params=params, clbits=[])
+    raise ValueError(f"Unsupported legacy circuit gate entry: {raw_gate!r}")
+
+
+def _circuit_ir_from_legacy_schedule_payload(payload: dict[str, Any]) -> CircuitIR:
+    raw_schedule = dict(payload.get("schedule", {}) or {})
+    schedule: dict[int, list[list[CircuitGate]]] = {}
+    for raw_tick, raw_lanes in raw_schedule.items():
+        if not isinstance(raw_lanes, list):
+            raise ValueError(f"Legacy circuit schedule[{raw_tick!r}] must be a list of lanes.")
+        lanes: list[list[CircuitGate]] = []
+        for raw_lane in raw_lanes:
+            if not isinstance(raw_lane, list):
+                raise ValueError(f"Legacy circuit schedule[{raw_tick!r}] lane entries must be lists.")
+            lanes.append([_legacy_gate_to_ir(raw_gate) for raw_gate in raw_lane])
+        schedule[int(raw_tick)] = lanes
+    return CircuitIR(
+        schema_version=str(payload.get("schema_version", "1.0")),
+        format=str(payload.get("format", "circuit_layer_yaml")),
+        num_qubits=int(payload.get("num_qubits", 0) or 0),
+        num_clbits=int(payload.get("num_clbits", 0) or 0),
+        schedule=schedule,
+        source_qasm="",
+    )
+
+
+def circuit_from_schedule_payload(
+    schedule_or_payload: dict[str, Any],
+    *,
+    num_qubits: int | None = None,
+    num_clbits: int | None = None,
+    schema_version: str = "1.0",
+    format: str = "circuit_layer_yaml",
+    param_bindings: dict[str, float] | None = None,
+) -> CircuitConfig:
+    """Build ``CircuitConfig`` from either a raw schedule or a schedule-style payload."""
+    payload = dict(schedule_or_payload or {})
+    if "schedule" not in payload:
+        payload = {
+            "schema_version": schema_version,
+            "format": format,
+            "num_qubits": int(num_qubits or 0),
+            "num_clbits": int(num_clbits or 0),
+            "schedule": payload,
+        }
+    else:
+        if num_qubits is not None:
+            payload["num_qubits"] = int(num_qubits)
+        if num_clbits is not None:
+            payload["num_clbits"] = int(num_clbits)
+        payload.setdefault("schema_version", schema_version)
+        payload.setdefault("format", format)
+    return CircuitConfig(
+        qasm_text=None,
+        circuit_ir=_circuit_ir_from_legacy_schedule_payload(payload),
+        param_bindings=dict(param_bindings or payload.get("param_bindings", {}) or {}) or None,
+    )
+
+
+def load_circuit_schedule_file(
+    path: str | Path,
+    *,
+    num_qubits: int | None = None,
+    num_clbits: int | None = None,
+    schema_version: str = "1.0",
+    format: str = "circuit_layer_yaml",
+    param_bindings: dict[str, float] | None = None,
+) -> CircuitConfig:
+    """Load a raw schedule YAML/JSON file into ``CircuitConfig``."""
+    _, payload = _load_mapping(path)
+    return circuit_from_schedule_payload(
+        payload,
+        num_qubits=num_qubits,
+        num_clbits=num_clbits,
+        schema_version=schema_version,
+        format=format,
+        param_bindings=param_bindings,
+    )
+
+
 def circuit_from_payload(payload: dict[str, Any], base_dir: Path | None = None) -> CircuitConfig:
     """Convert a circuit payload dictionary into a ``CircuitConfig`` object."""
+    if _is_legacy_schedule_circuit_payload(payload):
+        return CircuitConfig(
+            qasm_text=None,
+            circuit_ir=_circuit_ir_from_legacy_schedule_payload(payload),
+            param_bindings=dict(payload.get("param_bindings", {}) or {}) or None,
+        )
+
     _reject_unknown("circuit top-level", set(payload), _CIRCUIT_TOP_KEYS)
 
     qasm_text = payload.get("qasm_text")

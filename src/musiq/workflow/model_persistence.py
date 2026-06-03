@@ -51,7 +51,7 @@ from musiq.workflow.contracts import (
 )
 from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.workflow.output import write_trajectory_h5
-from musiq.pulse.visualize import load_trajectory_h5
+from musiq.visualization import load_trajectory_h5
 
 from musiq.workflow.model_utils import (
     public_value,

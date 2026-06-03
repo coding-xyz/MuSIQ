@@ -1,9 +1,9 @@
 # [COMPILER-P1] Typed Pulse Recipe Lowering and Parallel CircuitIR Refactor
 
 ## 0. Status
-- Status: In Progress
+- Status: Done
 - Owner: Unassigned
-- Updated: 2026-05-25
+- Updated: 2026-06-02
 
 ## 1. Background and Goals
 - Background:

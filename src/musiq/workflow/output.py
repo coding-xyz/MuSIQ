@@ -12,7 +12,7 @@ import h5py
 from musiq.circuit.import_qasm import CircuitAdapter
 from musiq.common.schemas import json_safe
 from musiq.pulse.sequence import PulseCompiler
-from musiq.pulse.visualize import plot_pulses, plot_report, plot_trajectory
+from musiq.visualization import make_pulse_figure, make_report_figure, make_trajectory_figure
 
 
 def _jsonable(value):
@@ -121,7 +121,7 @@ def export_result_figures(
     need_dxf = export_dxf and (allow is None or "timing_diagram" in allow)
     if need_pulse or need_dxf:
         try:
-            fig = plot_pulses(
+            fig = make_pulse_figure(
                 pulse_ir,
                 timing_layout=True,
                 show_clock=True,
@@ -143,7 +143,7 @@ def export_result_figures(
 
     if allow is None or "trajectory_plot" in allow:
         try:
-            fig = plot_trajectory(trajectory)
+            fig = make_trajectory_figure(trajectory)
             fig.savefig(out / "trajectory.png", dpi=180)
             outputs["trajectory_plot"] = "trajectory.png"
             try:
@@ -157,7 +157,7 @@ def export_result_figures(
 
     if allow is None or "report_plot" in allow:
         try:
-            fig = plot_report(analysis.get("report", {}))
+            fig = make_report_figure(analysis.get("report", {}))
             fig.savefig(out / "report.png", dpi=180)
             outputs["report_plot"] = "report.png"
             try:
