@@ -143,3 +143,45 @@ def test_parallel_schedule_uses_typed_gate_recipe_durations_for_tick_cursor():
     assert len(cz_items) == 1
     assert cz_items[0]["start_ns"] == 30.0
     assert cz_items[0]["end_ns"] == 80.0
+
+
+def test_parallel_schedule_treats_iswap_as_two_qubit_gate():
+    circuit = CircuitIR(
+        num_qubits=2,
+        schedule={
+            0: [
+                [CircuitGate(name="iswap", qubits=[0, 1])],
+                [CircuitGate(name="iswap", qubits=[0, 1])],
+            ],
+            1: [
+                [CircuitGate(name="sx", qubits=[0])],
+                [CircuitGate(name="sx", qubits=[1])],
+            ],
+        },
+    )
+
+    scheduled = build_gate_schedule(
+        circuit,
+        {
+            "gate_duration_ns": 20.0,
+            "single_qubit_gate_duration_ns": 20.0,
+            "double_qubit_gate_duration_ns": 48.0,
+            "idle_duration_ns": 20.0,
+            "measure_duration_ns": 100.0,
+            "reset_measure_duration_ns": 100.0,
+            "reset_deplete_duration_ns": 20.0,
+            "reset_latency_duration_ns": 20.0,
+            "reset_pi_duration_ns": 20.0,
+            "reset_apply_feedback": True,
+            "schedule_policy": "parallel",
+        },
+    )
+
+    iswap_items = [item for item in scheduled if str(item["gate"].name).lower() == "iswap"]
+    sx_items = [item for item in scheduled if str(item["gate"].name).lower() == "sx"]
+
+    assert len(iswap_items) == 1
+    assert iswap_items[0]["tc_channel"] == "TC_0_1"
+    assert iswap_items[0]["start_ns"] == 0.0
+    assert iswap_items[0]["end_ns"] == 48.0
+    assert {item["start_ns"] for item in sx_items} == {48.0}

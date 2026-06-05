@@ -1,0 +1,10 @@
+schema_version: "1.0"
+format: circuit_layer_yaml
+num_qubits: 2
+schedule:
+  0:
+    - - ["x", [0]]
+    - []
+  1:
+    - - ["iswap", [0, 1]]
+    - - ["iswap", [0, 1]]

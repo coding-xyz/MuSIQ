@@ -1,0 +1,8 @@
+schema_version: "1.0"
+format: circuit_layer_yaml
+num_qubits: 1
+schedule:
+  0:
+    - - ["sx", [0]]
+  1:
+    - - ["sx", [0]]

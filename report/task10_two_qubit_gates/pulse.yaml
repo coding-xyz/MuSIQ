@@ -1,0 +1,62 @@
+schema_version: "1.0"
+pulse:
+  defaults:
+    xy_carrier_freq_Hz: 5.0e9
+    schedule_policy: parallel
+
+  gates:
+    x:
+      recipe_type: x
+      shape: drag
+      duration_ns: 24.0
+      amplitude_Hz: 22.0e6
+      sigma_fraction: 0.2
+      drag_beta: 0.12
+
+    sx:
+      recipe_type: sx
+      shape: drag
+      duration_ns: 24.0
+      amplitude_Hz: 11.0e6
+      sigma_fraction: 0.2
+      drag_beta: 0.12
+
+    cz:
+      recipe_type: cz
+      shape: rect
+      duration_ns: 72.0
+      amplitude_Hz: 150.0e6
+      edge_ns: 4.0
+      target_conditional_phase_rad: 3.141592653589793
+
+    iswap:
+      recipe_type: iswap
+      shape: rect
+      duration_ns: 84.0
+      amplitude_Hz: -120.0e6
+      edge_ns: 4.0
+
+    virtual_z:
+      recipe_type: virtual_z
+
+  channel_overrides:
+    XY_0:
+      x:
+        carrier_freq_Hz: 5.050e9
+      sx:
+        carrier_freq_Hz: 5.050e9
+    XY_1:
+      x:
+        carrier_freq_Hz: 4.950e9
+      sx:
+        carrier_freq_Hz: 4.950e9
+    XY_2:
+      x:
+        carrier_freq_Hz: 5.000e9
+      sx:
+        carrier_freq_Hz: 5.000e9
+    C_0:
+      cz:
+        amplitude_Hz: 150.0e6
+      iswap:
+        amplitude_Hz: -120.0e6

@@ -45,6 +45,7 @@ SUPPORTED_SUBSYSTEM_MODELS = {
 REPRESENTATION_ALIASES = {"q": "quantum", "quantum": "quantum", "c": "classical", "classical": "classical"}
 XY_RE = re.compile(r"^XY_(\d+)$", re.IGNORECASE)
 Z_RE = re.compile(r"^Z_(\d+)$", re.IGNORECASE)
+COUPLER_RE = re.compile(r"^C_(\d+)$", re.IGNORECASE)
 RO_RE = re.compile(r"^RO_(\d+)$", re.IGNORECASE)
 TC_RE = re.compile(r"^TC_(\d+)$", re.IGNORECASE)
 TC_PAIR_RE = re.compile(r"^TC_(\d+)_(\d+)$", re.IGNORECASE)
@@ -246,11 +247,16 @@ def composite_metadata(hw: DeviceConfig) -> CompositeMetadata:
 
 def composite_quantum_projection(hw: DeviceConfig) -> QuantumProjection:
     """Extract quantum-only defaults used for dimensions and qubit parameters."""
+    return _quantum_projection_from_components(hw.components)
+
+
+def _quantum_projection_from_components(components: list[ComponentConfig]) -> QuantumProjection:
+    """Extract quantum-only defaults from an explicit component list."""
     qubits: list[dict[str, Any]] = []
     cavity_freq_hz = 0.0
     cavity_nmax = 0
     transmon_levels = 2
-    for comp in hw.components:
+    for comp in components:
         if comp.representation.strip().lower() == "disabled":
             continue
         comp_type = comp.type.strip().lower()
@@ -412,9 +418,33 @@ def lower_time(executable: ExecutableModel, pulse_samples: dict[str, dict[str, A
 def lower_system_context(executable: ExecutableModel, hw: DeviceConfig, study: StudySpec) -> SystemContext:
     """Build shared context needed by system, frame, noise, and readout lowering."""
     raw_num_qubits = int(max(0, executable.metadata.get("num_qubits", 0)))
-    composite_quantum = composite_quantum_projection(hw)
+    scope = _selected_structure_scope(hw, study.primary_step)
+    scoped_components = list(scope.components)
+    scoped_connections = list(scope.connections)
+    scoped_meta = CompositeMetadata(
+        components=scoped_components,
+        connections=scoped_connections,
+        readout_lines=[
+            ReadoutLineInfo(
+                id=comp.id,
+                representation=comp.representation,
+                description=comp.description,
+                parameters=dict(comp.parameters),
+            )
+            for comp in scoped_components
+            if comp.type.strip().lower() == "readout_line"
+        ],
+    )
+    composite_quantum = _quantum_projection_from_components(scoped_components)
     transmon_levels = int(_device_value(hw, "transmon_levels", composite_quantum.transmon_levels))
     cavity_nmax = int(_device_value(hw, "cavity_nmax", composite_quantum.cavity_nmax))
+    active_transmons = [
+        comp
+        for comp in scoped_components
+        if comp.type.strip().lower() == "transmon" and comp.representation.strip().lower() != "disabled"
+    ]
+    selected = dict(study.primary_step or {})
+    explicit_scope = bool(selected.get("active_components") or selected.get("active_connections"))
 
     req_level = str(_device_value(hw, "simulation_level", executable.level)).strip().lower()
     if req_level not in {"qubit", "nlevel", "cqed"}:
@@ -425,15 +455,16 @@ def lower_system_context(executable: ExecutableModel, hw: DeviceConfig, study: S
         req_level = "nlevel" if transmon_levels > 2 else "qubit"
 
     model_type, structure = resolve_model_type(req_level, hw, study.primary_step)
-    num_qubits = 0 if model_type == "cavity_classical_readout" else int(max(1, raw_num_qubits))
-    raw_qubits = list(hw.qubit_dicts or composite_quantum.qubits or [])
+    physical_num_qubits = len(active_transmons)
+    num_qubits = 0 if model_type == "cavity_classical_readout" else int(max(1, physical_num_qubits if explicit_scope else raw_num_qubits))
+    raw_qubits = list(composite_quantum.qubits or [])
     return SystemContext(
         raw_num_qubits=raw_num_qubits,
         num_qubits=num_qubits,
         simulation_level=req_level,
         model_type=model_type,
         structure=structure,
-        composite_meta=composite_metadata(hw),
+        composite_meta=scoped_meta,
         composite_quantum=composite_quantum,
         raw_qubits=[dict(q) for q in raw_qubits if isinstance(q, dict)],
         transmon_levels=transmon_levels,
@@ -552,6 +583,54 @@ def _sampled_control_record(
     return record
 
 
+def _transmon_component_index_map(hw: DeviceConfig) -> dict[str, int]:
+    mapping: dict[str, int] = {}
+    next_index = 0
+    for comp in hw.components:
+        if comp.representation.strip().lower() == "disabled":
+            continue
+        if comp.type.strip().lower() != "transmon":
+            continue
+        mapping[comp.id.strip()] = next_index
+        next_index += 1
+    return mapping
+
+
+def _tc_pair_via_target(
+    hw: DeviceConfig,
+    *,
+    i: int,
+    j: int,
+    num_qubits: int,
+) -> tuple[int | None, dict[str, Any]]:
+    component_index = _transmon_component_index_map(hw)
+    index_to_id = {idx: comp_id for comp_id, idx in component_index.items()}
+    a_id = index_to_id.get(int(i), "")
+    b_id = index_to_id.get(int(j), "")
+    if not a_id or not b_id:
+        return None, {}
+    want = {str(a_id).strip(), str(b_id).strip()}
+    for conn in hw.connections:
+        endpoints = {str(conn.a).strip(), str(conn.b).strip()}
+        via_id = str(conn.via or "").strip()
+        if endpoints != want or not via_id:
+            continue
+        via_target = component_index.get(via_id)
+        if via_target is None or via_target < 0 or via_target >= int(num_qubits):
+            continue
+        return int(via_target), dict(conn.parameters or {})
+    return None, {}
+
+
+def _coupler_channel_target(hw: DeviceConfig, *, coupler_index: int, num_qubits: int) -> int | None:
+    component_index = _transmon_component_index_map(hw)
+    coupler_id = f"c{int(coupler_index)}"
+    target = component_index.get(coupler_id)
+    if target is None or target < 0 or target >= int(num_qubits):
+        return None
+    return int(target)
+
+
 def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, Any]], num_qubits: int) -> SampledChannelsIR:
     """Convert sampled pulse channels into control/readout control records."""
     controls: list[dict[str, Any]] = []
@@ -571,6 +650,7 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
 
         mxy = XY_RE.match(ch_name)
         mz = Z_RE.match(ch_name)
+        mc = COUPLER_RE.match(ch_name)
         mro = RO_RE.match(ch_name)
         mtc = TC_RE.match(ch_name)
         mtc_pair = TC_PAIR_RE.match(ch_name)
@@ -588,9 +668,28 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
                 )
             )
             continue
+        if mc:
+            coupler_target = _coupler_channel_target(hw, coupler_index=int(mc.group(1)), num_qubits=num_qubits)
+            if coupler_target is None:
+                continue
+            controls.append(
+                _sampled_control_record(
+                    channel=ch_name,
+                    axis="z",
+                    target=coupler_target,
+                    times=times,
+                    values=values,
+                    scale=control_scale,
+                    carrier_freq_Hz=carrier_freq_Hz,
+                    carrier_phase_rad=carrier_phase_rad,
+                    metadata={"coupler_channel_index": int(mc.group(1))},
+                )
+            )
+            continue
         if mtc_pair:
             i = int(mtc_pair.group(1))
             j = int(mtc_pair.group(2))
+            via_target, via_params = _tc_pair_via_target(hw, i=i, j=j, num_qubits=num_qubits)
             pair_index = next(
                 (
                     idx
@@ -608,6 +707,27 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
                 None,
             )
             coupling_params = dict(getattr(coupling, "parameters", {}) or {}) if coupling is not None else {}
+            if via_target is not None:
+                via_ref_hz = float(via_params.get("park_freq_Hz", 0.0) or 0.0)
+                if via_ref_hz != 0.0 and 0 <= int(via_target) < len(pulse_refs) and pulse_refs[int(via_target)] == 0.0:
+                    pulse_refs[int(via_target)] = via_ref_hz
+                controls.append(
+                    _sampled_control_record(
+                        channel=ch_name,
+                        axis="z",
+                        target=via_target,
+                        times=times,
+                        values=values,
+                        scale=control_scale,
+                        metadata={
+                            "pair_index": pair_index,
+                            "tc_pair": [i, j],
+                            "tc_via_target": int(via_target),
+                            "tc_via_parameters": dict(via_params),
+                        },
+                    )
+                )
+                continue
             if 0 <= i < num_qubits and 0 <= j < num_qubits and i != j:
                 controls.append(
                     _sampled_control_record(
@@ -629,7 +749,29 @@ def lower_sampled_channels(hw: DeviceConfig, pulse_samples: dict[str, dict[str, 
             coupling = raw_couplings[pair_index] if 0 <= pair_index < len(raw_couplings) else None
             i = int(coupling.i) if coupling is not None else 0
             j = int(coupling.j) if coupling is not None else 1
+            via_target, via_params = _tc_pair_via_target(hw, i=i, j=j, num_qubits=num_qubits)
             coupling_params = dict(getattr(coupling, "parameters", {}) or {}) if coupling is not None else {}
+            if via_target is not None:
+                via_ref_hz = float(via_params.get("park_freq_Hz", 0.0) or 0.0)
+                if via_ref_hz != 0.0 and 0 <= int(via_target) < len(pulse_refs) and pulse_refs[int(via_target)] == 0.0:
+                    pulse_refs[int(via_target)] = via_ref_hz
+                controls.append(
+                    _sampled_control_record(
+                        channel=ch_name,
+                        axis="z",
+                        target=via_target,
+                        times=times,
+                        values=values,
+                        scale=control_scale,
+                        metadata={
+                            "pair_index": pair_index,
+                            "tc_pair": [i, j],
+                            "tc_via_target": int(via_target),
+                            "tc_via_parameters": dict(via_params),
+                        },
+                    )
+                )
+                continue
             if 0 <= i < num_qubits and 0 <= j < num_qubits and i != j:
                 controls.append(
                     _sampled_control_record(
@@ -714,6 +856,9 @@ def _channel_role_axis_target(channel: str, num_qubits: int) -> tuple[str, str |
     if mz:
         target = int(mz.group(1))
         return ("control", "z", target if target < num_qubits else None)
+    mc = COUPLER_RE.match(channel)
+    if mc:
+        return ("control", "z", None)
     mro = RO_RE.match(channel)
     if mro:
         return ("readout", None, int(mro.group(1)))
@@ -826,9 +971,18 @@ def lower_frame(
     )
 
 
-def lower_couplings(hw: DeviceConfig, num_qubits: int) -> list[CouplingTermSpec]:
+def lower_couplings(
+    hw: DeviceConfig,
+    num_qubits: int,
+    *,
+    primary_step: dict[str, Any] | None = None,
+) -> list[CouplingTermSpec]:
     """Lower device-level two-qubit couplings into Hamiltonian coupling terms."""
     couplings: list[CouplingTermSpec] = []
+    scope = _selected_structure_scope(hw, primary_step)
+    transmon_ids = [comp.id.strip() for comp in scope.components if comp.type.strip().lower() == "transmon"]
+    qubit_index = {comp_id: idx for idx, comp_id in enumerate(transmon_ids)}
+
     for c in hw.couplings:
         i, j = int(c.i), int(c.j)
         if i == j or i < 0 or j < 0 or i >= num_qubits or j >= num_qubits:
@@ -843,16 +997,17 @@ def lower_couplings(hw: DeviceConfig, num_qubits: int) -> list[CouplingTermSpec]
                 coefficient_rad_s=TWO_PI * g_hz,
             )
         )
-    if not couplings:
-        transmon_ids = [comp.id.strip() for comp in hw.components if comp.type.strip().lower() == "transmon"]
-        qubit_index = {comp_id: idx for idx, comp_id in enumerate(transmon_ids)}
-        for conn in hw.connections:
-            if conn.type.strip().lower() != "zz":
-                continue
+    for conn in scope.connections:
+        conn_kind = conn.type.strip().lower()
+        if conn_kind not in {"zz", "xx", "xx+yy", "exchange"}:
+            continue
+        i = qubit_index.get(conn.a.strip())
+        j = qubit_index.get(conn.b.strip())
+        if i is None or j is None or i == j or i < 0 or j < 0 or i >= num_qubits or j >= num_qubits:
+            continue
+        if conn_kind == "zz":
             i = qubit_index.get(conn.a.strip())
             j = qubit_index.get(conn.b.strip())
-            if i is None or j is None or i == j or i < 0 or j < 0 or i >= num_qubits or j >= num_qubits:
-                continue
             residual_zz_hz = float(dict(conn.noise).get("residual_zz_Hz", 0.0) or 0.0)
             couplings.append(
                 CouplingTermSpec(
@@ -866,6 +1021,20 @@ def lower_couplings(hw: DeviceConfig, num_qubits: int) -> list[CouplingTermSpec]
                     coefficient_rad_s=TWO_PI * residual_zz_hz,
                 )
             )
+            continue
+        g_hz = float(dict(conn.parameters).get("g_Hz", 0.0) or 0.0)
+        couplings.append(
+            CouplingTermSpec(
+                id=str(conn.id),
+                kind="xx+yy" if conn_kind == "exchange" else str(conn_kind),
+                i=int(i),
+                j=int(j),
+                a=str(conn.a),
+                b=str(conn.b),
+                coefficient_Hz=g_hz,
+                coefficient_rad_s=TWO_PI * g_hz,
+            )
+        )
     return couplings
 
 

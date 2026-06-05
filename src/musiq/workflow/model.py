@@ -301,6 +301,18 @@ class Model:
         """Run one configured profile end-to-end."""
         run_profile(self, profile_id, tag=tag)
 
+    def calibrate(
+        self,
+        config=None,
+        **overrides: Any,
+    ):
+        """Auto-calibrate supported pulse parameters on this model."""
+        from musiq.calibrate import CalibrationConfig, calibrate_model
+
+        if config is not None and not isinstance(config, CalibrationConfig):
+            raise TypeError("Model.calibrate() expects a CalibrationConfig instance or None.")
+        return calibrate_model(self, config, **overrides)
+
 
 def _ensure_config(value: Any, config_type: str, base_dir: Path | None = None) -> Any:
     """Ensure the value is a proper Config object, converting from path or dict if necessary."""

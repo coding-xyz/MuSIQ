@@ -1,0 +1,36 @@
+schema_version: "3.0"
+solver:
+  engine: qutip
+  study:
+    - name: coupler_gate_demo
+      description: explicit two-qubit plus coupler model with gate pulses compiled onto C_0
+      active_components: [q0, q1, c0]
+      active_connections: [xx_q0_c0, xx_q1_c0, xx_q0_q1]
+      prep_state:
+        label: ground
+        sequence: []
+      representations:
+        q0: quantum
+        q1: quantum
+        c0: quantum
+      bases:
+        q0:
+          kind: nlevel
+          levels: 3
+        q1:
+          kind: nlevel
+          levels: 3
+        c0:
+          kind: nlevel
+          levels: 3
+      solver_mode: me
+      time:
+        dt_s: 2.0e-10
+        t_padding_s: 16.0e-9
+      frame:
+        mode: rotating
+        reference: carrier
+        rwa: true
+      options: {}
+  schedule:
+    policy: serial

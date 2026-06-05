@@ -7,6 +7,14 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 
+_TIME_UNIT_SCALE: dict[str, float] = {
+    "s": 1.0,
+    "ms": 1.0e-3,
+    "us": 1.0e-6,
+    "ns": 1.0e-9,
+}
+
+
 def _as_float_array(values: Sequence[float] | np.ndarray) -> np.ndarray:
     return np.asarray(values, dtype=float)
 
@@ -102,6 +110,22 @@ def _default_ylabel(metric_name: str) -> str:
     if normalized.startswith("finalp"):
         return "final population"
     return metric_name
+
+
+def _normalize_time_unit(unit: str | None) -> str:
+    if unit is None:
+        return "s"
+    normalized = str(unit).strip().lower()
+    if normalized not in _TIME_UNIT_SCALE:
+        supported = ", ".join(sorted(_TIME_UNIT_SCALE))
+        raise ValueError(f"Unsupported time_unit `{unit}`. Supported units: {supported}.")
+    return normalized
+
+
+def _scale_times(values: Sequence[float] | np.ndarray, *, time_unit: str | None) -> np.ndarray:
+    unit = _normalize_time_unit(time_unit)
+    scale = _TIME_UNIT_SCALE[unit]
+    return _as_float_array(values) / scale
 
 
 def _merge_series_style(
@@ -253,6 +277,7 @@ def plot_case_metrics(
     series_keys: Sequence[str] | None = None,
     style: Mapping[str, Any] | None = None,
     series_styles: Mapping[str, Mapping[str, Any]] | None = None,
+    time_unit: str | None = "s",
     title: str | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
@@ -262,9 +287,11 @@ def plot_case_metrics(
     analysis = _resolve_analysis(model, analysis_id, scope="case")
     metric_map = dict(getattr(getattr(analysis, "output", None), "metrics", {}) or {})
     metric_key, metric = _resolve_metric(metric_map, metric_name)
-    x = _as_float_array(getattr(metric, "times", []) or [])
+    resolved_time_unit = _normalize_time_unit(time_unit)
+    x = _scale_times(getattr(metric, "times", []) or [], time_unit=resolved_time_unit)
     values = getattr(metric, "values", [])
     style = dict(style or {})
+    resolved_xlabel = xlabel or f"time ({resolved_time_unit})"
 
     if isinstance(values, Mapping):
         ordered_keys = list(series_keys or values.keys())
@@ -276,7 +303,7 @@ def plot_case_metrics(
             ax,
             x,
             plotted,
-            xlabel=xlabel or "time (ns)",
+            xlabel=resolved_xlabel,
             ylabel=ylabel or _default_ylabel(metric_key),
             title=title or f"{analysis_id}: {metric_key}",
             style=style,
@@ -286,7 +313,7 @@ def plot_case_metrics(
         return
 
     ax.plot(x, _as_float_array(values), **style)
-    ax.set_xlabel(xlabel or "time (ns)")
+    ax.set_xlabel(resolved_xlabel)
     ax.set_ylabel(ylabel or _default_ylabel(metric_key))
     ax.set_title(title or f"{analysis_id}: {metric_key}")
 

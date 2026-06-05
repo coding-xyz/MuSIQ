@@ -1,0 +1,49 @@
+schema_version: "3.0"
+device:
+  components:
+    - id: q0
+      type: transmon
+      description: higher-frequency endpoint qubit
+      ports:
+        drive: drive_port_0
+      parameters:
+        freq_Hz: 5.050e9
+        anharmonicity_Hz: -2.10e8
+    - id: q1
+      type: transmon
+      description: lower-frequency endpoint qubit
+      ports:
+        drive: drive_port_1
+      parameters:
+        freq_Hz: 4.950e9
+        anharmonicity_Hz: -1.90e8
+    - id: c0
+      type: transmon
+      description: tunable coupler with visible internal-state evolution
+      ports:
+        drive: flux_port_0
+      parameters:
+        freq_Hz: 5.000e9
+        anharmonicity_Hz: -3.00e8
+  connections:
+    - id: xx_q0_c0
+      type: xx+yy
+      a: q0
+      b: c0
+      parameters:
+        g_Hz: 4.5e7
+    - id: xx_q1_c0
+      type: xx+yy
+      a: q1
+      b: c0
+      parameters:
+        g_Hz: 4.5e7
+    - id: xx_q0_q1
+      type: xx+yy
+      a: q0
+      b: q1
+      parameters:
+        g_Hz: -7.5e6
+  simulation_level: nlevel
+  control_scale: 1.0
+  noise: {}

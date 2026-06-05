@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import re
 from typing import Any
 
 from musiq.common.unit_schema import MODEL_HARDWARE_KEYS, reject_unknown_keys
@@ -47,6 +48,7 @@ _DRIVEN_SINGLE_QUBIT_SPECS: dict[str, dict[str, Any]] = {
     "ry": {"rotation_axis": "y", "fixed_rotation_rad": None, "parametric_rotation": True},
     "h": {"rotation_axis": "y", "fixed_rotation_rad": 0.5 * math.pi, "parametric_rotation": False},
 }
+_COUPLER_ID_RE = re.compile(r"^c(\d+)$", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,7 +285,7 @@ def validate_typed_pulse_schema(hw: dict[str, Any] | None, *, strict_user_payloa
             raise ValueError(f"Pulse recipe `gates.{gate_name}` must be a mapping.")
         _reject_legacy_amp_scale(f"pulse.gates.{gate_name}", recipe)
         recipe_type = str(recipe.get("recipe_type", gate_name)).strip().lower()
-        if recipe_type in {"sx", "cz"}:
+        if recipe_type in {"sx", "cz", "iswap"}:
             missing = [field for field in ("duration_ns", "amplitude_Hz") if field not in recipe]
             if missing:
                 raise ValueError(f"Pulse recipe `gates.{gate_name}` is missing required fields: {missing}")
@@ -318,7 +320,45 @@ def _tc_channel_name(qubits: list[int]) -> str:
     return f"TC_{i}_{j}"
 
 
-def _channel_name_for_gate(gate_name: str, qubits: list[int], tc_index: int | None, tc_channel: str | None = None) -> str | None:
+def _explicit_coupler_channel_name(hw: dict[str, Any] | None, qubits: list[int]) -> str | None:
+    raw_connections = [dict(item) for item in list((hw or {}).get("connections", []) or []) if isinstance(item, dict)]
+    if len(qubits) < 2:
+        return None
+    q_ids = {f"q{int(qubits[0])}", f"q{int(qubits[1])}"}
+    coupler_sets: list[set[str]] = []
+    for q_id in q_ids:
+        connected: set[str] = set()
+        for conn in raw_connections:
+            conn_type = str(conn.get("type", "")).strip().lower()
+            if conn_type not in {"xx+yy", "exchange"}:
+                continue
+            a_id = str(conn.get("a", "")).strip()
+            b_id = str(conn.get("b", "")).strip()
+            if a_id == q_id and _COUPLER_ID_RE.match(b_id):
+                connected.add(b_id.lower())
+            elif b_id == q_id and _COUPLER_ID_RE.match(a_id):
+                connected.add(a_id.lower())
+        coupler_sets.append(connected)
+    if len(coupler_sets) != 2:
+        return None
+    common = coupler_sets[0] & coupler_sets[1]
+    if len(common) != 1:
+        return None
+    coupler_id = next(iter(common))
+    match = _COUPLER_ID_RE.match(coupler_id)
+    if match is None:
+        return None
+    return f"C_{int(match.group(1))}"
+
+
+def _channel_name_for_gate(
+    gate_name: str,
+    qubits: list[int],
+    tc_index: int | None,
+    tc_channel: str | None = None,
+    *,
+    hw: dict[str, Any] | None = None,
+) -> str | None:
     gate = str(gate_name).strip().lower()
     if gate in {"x", "sx", "rx", "ry", "h"}:
         if not qubits:
@@ -328,8 +368,8 @@ def _channel_name_for_gate(gate_name: str, qubits: list[int], tc_index: int | No
         if not qubits:
             return None
         return f"RO_{int(qubits[0])}"
-    if gate in {"cz", "cx"}:
-        return str(tc_channel or _tc_channel_name(qubits))
+    if gate in {"cz", "cx", "iswap"}:
+        return str(_explicit_coupler_channel_name(hw=hw, qubits=qubits) or tc_channel or _tc_channel_name(qubits))
     return None
 
 
@@ -373,10 +413,10 @@ def _build_typed_gate_recipe(
             fixed_rotation_rad=gate_spec["fixed_rotation_rad"],
             parametric_rotation=bool(gate_spec["parametric_rotation"]),
         )
-    if recipe_type == "cz":
+    if recipe_type in {"cz", "iswap"}:
         return CouplerTwoQubitRecipe(
             logical_gate=logical_gate,
-            recipe_type="cz",
+            recipe_type=recipe_type,
             duration_ns=float(recipe["duration_ns"]),
             amplitude_Hz=float(recipe["amplitude_Hz"]),
             shape=str(recipe["shape"]) if "shape" in recipe and recipe.get("shape") is not None else None,
@@ -640,11 +680,11 @@ def _fallback_recipe_for_gate(
             phase_rad=0.0,
             segments=tuple(_default_measure_segments(cfg)),
         )
-    if gate == "cz":
+    if gate in {"cz", "iswap"}:
         duration = float(cfg["double_qubit_gate_duration_ns"])
         return CouplerTwoQubitRecipe(
-            logical_gate="cz",
-            recipe_type="cz",
+            logical_gate=gate,
+            recipe_type=gate,
             duration_ns=duration,
             amplitude_Hz=_double_qubit_effective_amp_rad_s(
                 cfg=cfg,
@@ -656,7 +696,7 @@ def _fallback_recipe_for_gate(
             / (2.0 * math.pi),
             shape="rect",
             edge_ns=float(cfg["rect_edge_ns"]),
-            target_conditional_phase_rad=math.pi,
+            target_conditional_phase_rad=math.pi if gate == "cz" else 0.0,
         )
     return None
 
@@ -739,7 +779,7 @@ def _plan_coupler_two_qubit_recipe(
     qubits: list[int],
     start_ns: float,
     cfg: dict[str, Any],
-    tc_channel: str | None,
+    physical_channel: str | None,
 ) -> OperationPlan:
     duration = float(recipe.duration_ns)
     edge_ns = float(
@@ -753,7 +793,7 @@ def _plan_coupler_two_qubit_recipe(
         duration_ns=float(duration),
         pulses=(
             PlannedPulse(
-                channel=str(tc_channel or _tc_channel_name(qubits)),
+                channel=str(physical_channel or _tc_channel_name(qubits)),
                 t0_ns=float(start_ns),
                 t1_ns=float(start_ns + duration),
                 amp=2.0 * math.pi * float(recipe.amplitude_Hz),
@@ -839,7 +879,7 @@ def _plan_typed_recipe(
     gate_params: list[float] | None,
     start_ns: float,
     cfg: dict[str, Any],
-    tc_channel: str | None,
+    physical_channel: str | None,
 ) -> OperationPlan | None:
     if isinstance(recipe, VirtualPhaseGateRecipe):
         return OperationPlan(duration_ns=0.0)
@@ -857,7 +897,7 @@ def _plan_typed_recipe(
             qubits=qubits,
             start_ns=start_ns,
             cfg=cfg,
-            tc_channel=tc_channel,
+            physical_channel=physical_channel,
         )
     if isinstance(recipe, IdleGateRecipe):
         return OperationPlan(duration_ns=float(recipe.duration_ns or cfg["idle_duration_ns"]))
@@ -1035,7 +1075,7 @@ def instantiate_operation_recipe(
     """Instantiate one operation into scheduled pulses and events."""
     cfg = resolve_lowering_hardware(hw)
     gate = str(gate_name).lower()
-    typed_channel = _channel_name_for_gate(gate, qubits, tc_index, tc_channel)
+    typed_channel = _channel_name_for_gate(gate, qubits, tc_index, tc_channel, hw=hw)
     typed_recipe = resolve_typed_gate_recipe(hw, gate, channel_name=typed_channel)
     plan = _plan_typed_recipe(
         typed_recipe if typed_recipe is not None else _fallback_recipe_for_gate(
@@ -1049,7 +1089,7 @@ def instantiate_operation_recipe(
         gate_params=gate_params,
         start_ns=start_ns,
         cfg=cfg,
-        tc_channel=tc_channel,
+        physical_channel=typed_channel,
     ) if (typed_recipe is not None or gate not in {"cx", "reset", "barrier"}) else None
     if plan is None and gate == "cx":
         plan = _plan_default_cx_recipe(
@@ -1070,7 +1110,7 @@ def instantiate_operation_recipe(
     elif plan is None and gate == "barrier":
         plan = OperationPlan(duration_ns=0.0)
     elif plan is None:
-        supported = sorted([*_DRIVEN_SINGLE_QUBIT_SPECS.keys(), "barrier", "cz", "cx", "id", "measure", "reset", "rz", "z"])
+        supported = sorted([*_DRIVEN_SINGLE_QUBIT_SPECS.keys(), "barrier", "cz", "cx", "id", "iswap", "measure", "reset", "rz", "z"])
         raise ValueError(
             f"Unsupported gate for pulse lowering: {gate}. "
             f"Supported gates: {', '.join(supported)}"

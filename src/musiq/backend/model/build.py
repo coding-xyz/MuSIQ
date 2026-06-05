@@ -103,7 +103,7 @@ class DefaultModelBuilder:
         system_context = lower_system_context(executable, config.device, study_spec)
         channels = lower_sampled_channels(config.device, pulse_sample_cfg, system_context.num_qubits)
         frame_spec = lower_frame(config.frame, config.device, system_context.raw_qubits, channels, system_context.num_qubits)
-        couplings = lower_couplings(config.device, system_context.num_qubits)
+        couplings = lower_couplings(config.device, system_context.num_qubits, primary_step=study_spec.primary_step)
 
         solver_options = {
             key: value

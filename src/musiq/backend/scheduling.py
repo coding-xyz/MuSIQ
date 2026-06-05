@@ -12,7 +12,7 @@ def _gate_family(name: str) -> str:
     gate = str(name).lower()
     if gate in {"x", "sx", "h", "rx", "ry", "z", "rz"}:
         return "single_qubit"
-    if gate in {"cz", "cx"}:
+    if gate in {"cz", "cx", "iswap"}:
         return "two_qubit"
     if gate == "measure":
         return "measure"
@@ -31,7 +31,7 @@ def _typed_gate_recipe_duration_ns(gate: CircuitGate, hw: dict[str, Any]) -> flo
         channel_name = f"XY_{qubits[0]}"
     elif gate_name == "measure" and qubits:
         channel_name = f"RO_{qubits[0]}"
-    elif gate_name in {"cz", "cx"} and qubits:
+    elif gate_name in {"cz", "cx", "iswap"} and qubits:
         channel_name = _tc_channel_name(qubits)
 
     recipe = resolve_typed_gate_recipe(hw, gate_name, channel_name=channel_name)
@@ -54,7 +54,7 @@ def _gate_duration_ns(gate: CircuitGate, hw: dict[str, Any]) -> float:
         return idle_dur
     if name in {"x", "sx", "h", "rx", "ry"}:
         return gate_dur
-    if name in {"cz", "cx"}:
+    if name in {"cz", "cx", "iswap"}:
         return two_qubit_dur
     if name == "measure":
         return float(hw["measure_duration_ns"])
@@ -98,7 +98,7 @@ def _gate_resources(gate: CircuitGate, *, tc_channel: str | None = None) -> set[
     resources = {f"Q{q}" for q in qs}
     if name in {"measure", "reset"}:
         resources.update(f"RO{q}" for q in qs)
-    if name in {"cz", "cx"}:
+    if name in {"cz", "cx", "iswap"}:
         resources.add(str(tc_channel or _tc_channel_name(qs)))
     return resources
 
@@ -257,7 +257,7 @@ def build_gate_schedule(schedule_or_circuit: CircuitIR, hw: dict[str, Any]) -> l
             raw_gates.append((int(tick), gate))
     gates: list[dict[str, Any]] = []
     for idx, (tick, gate) in enumerate(raw_gates):
-        tc_channel = _tc_channel_name(gate.qubits) if str(gate.name).lower() in {"cz", "cx"} else None
+        tc_channel = _tc_channel_name(gate.qubits) if str(gate.name).lower() in {"cz", "cx", "iswap"} else None
         gates.append(
             {
                 "index": idx,

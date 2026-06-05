@@ -10,7 +10,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 
 from musiq.schemas.model import ModelRun, RunArtifacts, RunIdentity
-from musiq.schemas.pulse import ChannelSpec, PulseIR, PulseSpec
+from musiq.schemas.pulse import Carrier, ChannelSpec, PulseIR, PulseSpec
 from musiq.schemas.results import (
     CaseAnalysis,
     MetricSeries,
@@ -194,6 +194,40 @@ def test_model_aware_plot_functions():
     plt.close(fig)
 
 
+def test_plot_pulse_adds_zero_q_trace_for_carrier_only_waveform():
+    pulse_ir = PulseIR(
+        t_end_s=20e-9,
+        channels=[
+            ChannelSpec(
+                name="XY_0",
+                pulses=[
+                    PulseSpec(
+                        t0_s=0.0,
+                        t1_s=20e-9,
+                        amp=0.25,
+                        shape="rect",
+                        carrier=Carrier(freq=5.0e9, phase=0.0),
+                    )
+                ],
+            )
+        ],
+    )
+    run_obj = ModelRun(
+        identity=RunIdentity(run_id="solver_0", solver_id="solver_0", study_name="pulse_shape"),
+        runtime_task=SimpleNamespace(),
+        artifacts=RunArtifacts(pulse_ir=pulse_ir),
+        results={},
+    )
+    model = SimpleNamespace(runs={"solver_0": run_obj}, analyses={})
+
+    fig, ax = plt.subplots(figsize=(5, 3))
+    plot_pulse(ax, model, run_id="solver_0")
+
+    assert len(ax.lines) == 2
+    assert np.allclose(ax.lines[1].get_ydata(), 0.0)
+    plt.close(fig)
+
+
 def test_plot_case_iq_cloud_from_model():
     model = _build_fake_model()
     fig, ax = plt.subplots(figsize=(4, 4))
@@ -222,6 +256,28 @@ def test_plot_case_metrics_applies_default_and_per_series_styles():
     assert ax.lines[0].get_label() == "ideal"
     assert ax.lines[0].get_linestyle() == "--"
     assert np.isclose(ax.lines[0].get_alpha(), 0.4)
+    plt.close(fig)
+
+
+def test_plot_case_metrics_supports_time_unit_conversion():
+    model = _build_fake_model()
+    model.analyses["case_0"].output.metrics["population"].times = [0.0, 10e-9, 20e-9]
+    fig, ax = plt.subplots(figsize=(5, 3))
+
+    plot_case_metrics(ax, model, "case_0", "population", series_keys=["0"], time_unit="ns")
+
+    assert ax.get_xlabel() == "time (ns)"
+    assert np.allclose(ax.lines[0].get_xdata(), [0.0, 10.0, 20.0])
+    plt.close(fig)
+
+
+def test_plot_case_metrics_rejects_unknown_time_unit():
+    model = _build_fake_model()
+    fig, ax = plt.subplots(figsize=(5, 3))
+
+    with pytest.raises(ValueError, match="Unsupported time_unit"):
+        plot_case_metrics(ax, model, "case_0", "population", time_unit="minute")
+
     plt.close(fig)
 
 

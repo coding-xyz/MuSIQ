@@ -6,8 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from musiq.backend.config import normalize_device_config, normalize_noise_config
-from musiq.backend.model.lowering import lower_couplings
+from musiq.backend.config import normalize_device_config, normalize_noise_config, normalize_study_config
+from musiq.backend.model.lowering import lower_couplings, lower_study, lower_system_context
+from musiq.schemas.pulse import ExecutableModel
 from musiq.schemas.connections import SystemConnectionSpec
 from musiq.schemas.utils import ParameterList, ParameterSweepConfig
 from musiq.ui.cli import build_parser
@@ -262,6 +263,7 @@ def test_report_pulse_files_use_typed_schema_and_load():
         Path("report/task2_single_qubit_decoherence/pulse_1overf.yaml"),
         Path("report/task3_gaussian_drag_comparison/pulse_drag.yaml"),
         Path("report/task3_gaussian_drag_comparison/pulse_gaussian.yaml"),
+        Path("report/task10_two_qubit_gates/pulse.yaml"),
         Path("report/task6_single_qubit_readout/pulse.yaml"),
         Path("report/task6_single_qubit_readout/pulse_cqed.yaml"),
     ]
@@ -581,6 +583,45 @@ def test_zz_connection_uses_new_effective_and_residual_fields():
     assert static_couplings[0].coefficient_Hz == pytest.approx(1.2e5)
     assert conn_spec.to_device_dict()["parameters"]["max_effective_coupling_Hz"] == pytest.approx(18.0e6)
     assert conn_spec.to_device_dict()["noise"]["residual_zz_Hz"] == pytest.approx(1.2e5)
+
+
+def test_active_coupler_scope_uses_physical_transmon_count_and_connection_couplings():
+    device = normalize_device_config(
+        {
+            "components": [
+                {"id": "q0", "type": "transmon", "parameters": {"freq_Hz": 5.05e9, "anharmonicity_Hz": -2.1e8}},
+                {"id": "q1", "type": "transmon", "parameters": {"freq_Hz": 4.95e9, "anharmonicity_Hz": -1.9e8}},
+                {"id": "c0", "type": "transmon", "parameters": {"freq_Hz": 5.00e9, "anharmonicity_Hz": -3.0e8}},
+            ],
+            "connections": [
+                {"id": "xx_q0_c0", "type": "xx+yy", "a": "q0", "b": "c0", "parameters": {"g_Hz": 4.5e7}},
+                {"id": "xx_q1_c0", "type": "xx+yy", "a": "q1", "b": "c0", "parameters": {"g_Hz": 4.5e7}},
+                {"id": "xx_q0_q1", "type": "xx+yy", "a": "q0", "b": "q1", "parameters": {"g_Hz": -7.5e6}},
+            ],
+            "simulation_level": "nlevel",
+        }
+    )
+    step = {
+        "name": "coupler_scope",
+        "active_components": ["q0", "q1", "c0"],
+        "active_connections": ["xx_q0_c0", "xx_q1_c0", "xx_q0_q1"],
+        "representations": {"q0": "quantum", "q1": "quantum", "c0": "quantum"},
+        "bases": {
+            "q0": {"kind": "nlevel", "levels": 3},
+            "q1": {"kind": "nlevel", "levels": 3},
+            "c0": {"kind": "nlevel", "levels": 3},
+        },
+    }
+    study = lower_study(normalize_study_config([step], primary_step=step))
+    executable = ExecutableModel(level="nlevel", metadata={"num_qubits": 2})
+
+    context = lower_system_context(executable, device, study)
+    couplings = lower_couplings(device, context.num_qubits, primary_step=study.primary_step)
+
+    assert context.raw_num_qubits == 2
+    assert context.num_qubits == 3
+    assert [comp.id for comp in context.composite_meta.components] == ["q0", "q1", "c0"]
+    assert {(item.i, item.j, item.kind) for item in couplings} == {(0, 1, "xx+yy"), (0, 2, "xx+yy"), (1, 2, "xx+yy")}
 
 
 def test_normalize_noise_config_rejects_legacy_top_level_relaxation_keys():

@@ -18,8 +18,36 @@ S_TO_NS = 1e9
 def _coerce_sample_map(pulse_data: PulseIR | Mapping[str, Mapping[str, Any]], sample_rate: float) -> dict[str, dict[str, Any]]:
     if isinstance(pulse_data, PulseIR):
         compiled = PulseCompiler.compile(pulse_data, sample_rate_Hz=sample_rate)
-        return {str(name): dict(payload) for name, payload in compiled.items()}
-    return {str(name): dict(payload) for name, payload in pulse_data.items()}
+        sample_map = {str(name): dict(payload) for name, payload in compiled.items()}
+        return _ensure_iq_for_carrier_channels(sample_map, pulse_data)
+    sample_map = {str(name): dict(payload) for name, payload in pulse_data.items()}
+    return _ensure_iq_for_carrier_channels(sample_map)
+
+
+def _payload_has_carrier(payload: Mapping[str, Any]) -> bool:
+    carrier_freq = np.asarray(payload.get("carrier_freq_Hz", []), dtype=float)
+    carrier_phase = np.asarray(payload.get("carrier_phase_rad", []), dtype=float)
+    return bool(np.any(np.abs(carrier_freq) > 0.0) or np.any(np.abs(carrier_phase) > 0.0))
+
+
+def _ensure_iq_for_carrier_channels(
+    sample_map: Mapping[str, Mapping[str, Any]],
+    pulse_ir: PulseIR | None = None,
+) -> dict[str, dict[str, Any]]:
+    carrier_channels: set[str] = set()
+    if pulse_ir is not None:
+        for channel in pulse_ir.channels:
+            if any(pulse.carrier is not None for pulse in channel.pulses):
+                carrier_channels.add(str(channel.name))
+
+    normalized: dict[str, dict[str, Any]] = {}
+    for channel_name, payload in sample_map.items():
+        coerced = dict(payload)
+        has_carrier = channel_name in carrier_channels or _payload_has_carrier(coerced)
+        if has_carrier and "y_quadrature" not in coerced:
+            coerced["y_quadrature"] = np.zeros_like(np.asarray(coerced.get("y", []), dtype=float))
+        normalized[str(channel_name)] = coerced
+    return normalized
 
 
 def _resolve_run(model, run_id: str | None = None, *, study_name: str | None = None, solver_id: str | None = None):

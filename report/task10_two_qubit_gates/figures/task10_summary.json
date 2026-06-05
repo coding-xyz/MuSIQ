@@ -1,0 +1,31 @@
+{
+  "single_qubit_calibration": {
+    "sx_q0": {
+      "amplitude_Hz": 11000000.0,
+      "loss": 2.617298227022827e-05,
+      "single_sx_final_P0": 0.5036135281274445,
+      "single_sx_final_P1": 0.4963856097624311,
+      "single_sx_final_P2": 8.621101246609092e-07,
+      "double_sx_final_P1": 0.9998349079557892
+    },
+    "x_q0": {
+      "amplitude_Hz": 22031250.0,
+      "loss": 1.0713744299024426e-06,
+      "single_x_final_P0": 0.0007284738086092612,
+      "single_x_final_P1": 0.9992647997812177,
+      "single_x_final_P2": 6.726410173243004e-06
+    }
+  },
+  "cz_gate_time_scan": {
+    "best_duration_ns": 79.0,
+    "best_bell_fidelity": 0.2719379896455065,
+    "best_final_P00": 0.4431787549721558,
+    "best_final_P11": 0.0977667169743098
+  },
+  "iswap_gate_time_scan": {
+    "best_duration_ns": 108.0,
+    "best_final_P01": 2.5425177721719713e-06,
+    "best_final_P10": 0.9983801062117379,
+    "best_final_coupler_excited": 8.111405899881557e-05
+  }
+}
